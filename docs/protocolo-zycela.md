@@ -288,7 +288,18 @@ Trama de estado real: `[4E001801FF1000FF11010904010300090800]`. Modo RGB 0, efec
 
 En la trama `26` la fuente de sonido vale `FF`. El mini-programa no trata ese valor de forma especial: simplemente no marca ninguna de las dos opciones.
 
-## 7. Contraseñas del mini-programa
+## 7. Otras vías de control (documentación del fabricante)
+
+Detalles y fuentes en [investigacion-eventos.md](investigacion-eventos.md).
+
+- **Botones de favoritos de la radio (CD按键控制).** Según el manual del fabricante para BMW F30–F36, el 4 (o 1+4) cambia el modo, el 5 y el 6 (o 1+5 y 1+6) el color, y el 7 y el 8 (o 1+7 y 1+8) el brillo. El manual del G38 lo describe "tocando" los botones. Falta comprobarlo en el F32.
+- **Menú del iDrive (屏控).** Iluminación interior → luz ambiente: color, brillo y "atenuar en conducción nocturna". Solo existe si el iDrive tiene ese menú, de fábrica o activado por codificación.
+- **Botón del volante aprendido (`[22XX]`).** Hace una de cinco funciones (despertar, modo de efectos, submodo, modo/color + y −). No se conoce otra forma de desaprenderlo que restaurar de fábrica y reconfigurar.
+- **Interruptor de funciones nº 8.** En los manuales del fabricante para F30–F36 y G38 aparece **encendido** (`00000001`), con la nota 功能拨码不动 ("no toques el dial de funciones"). En este coche está apagado. No se sabe qué hace.
+- **La bienvenida (迎宾)** la llama el manual de la app "幻彩迎宾开关": funciona sobre las tiras animadas (HC). No hay ningún comando para elegir qué la dispara.
+- **Alimentación.** El fabricante conecta el kit en el conector de 4 pines del mando del iDrive. En los foros, el pin 1 de ese conector se describe como 30B: corriente solo mientras el coche está despierto. Eso encaja con que la conexión se cortara unos 30 minutos después de bloquear.
+
+## 8. Contraseñas del mini-programa
 - `1689`: ajustes de fábrica.
 - `6666`: modo de depuración (consola de comandos).
 
