@@ -2031,3 +2031,257 @@ textarea.text-input {
     animation: none !important;
   }
 }
+
+/* Pruebas del coche y copias de seguridad */
+.ct-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.ct-status-success {
+  color: var(--ok);
+}
+
+.ct-status-warning {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.ct-status-error {
+  background: var(--danger-bg);
+  color: #ffd9d9;
+}
+
+.ct-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 2px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: #f1dfb8;
+}
+
+.ct-pending h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 20px;
+  color: var(--warn);
+}
+
+.ct-pending p {
+  margin: 0;
+  font-size: 15px;
+}
+
+.ct-banner .btn {
+  align-self: flex-start;
+}
+
+/* Always on screen during a session: last element of the page, stuck above the tab bar. */
+.ct-bar {
+  position: sticky;
+  bottom: calc(var(--safe-bottom) + 70px);
+  z-index: 20;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: rgba(10, 13, 17, 0.95);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.ct-bar-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.ct-step-anchor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scroll-margin-top: calc(72px + var(--safe-top));
+  scroll-margin-bottom: calc(150px + var(--safe-bottom));
+}
+
+.ct-question {
+  margin-top: 4px;
+}
+
+.ct-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ct-details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.ct-details summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.ct-details-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.menu-badge {
+  flex: none;
+  white-space: nowrap;
+}
+
+.ct-snapshot {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.ct-why {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.ct-answers {
+  display: grid;
+  gap: 10px;
+}
+
+.ct-answer {
+  min-height: 56px;
+  font-size: 17px;
+}
+
+.ct-countdown {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  color: var(--text-muted);
+}
+
+.ct-countdown-num {
+  min-width: 2.5ch;
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.ct-conclusion {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.backup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.backup-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.backup-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.backup-label {
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.backup-meta {
+  font-size: 13px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.backup-confirm,
+.backup-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.check-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.check-ok {
+  color: var(--ok);
+}
+
+.check-bad {
+  color: var(--danger);
+}
+
+.check-unknown {
+  color: var(--warn);
+}
+
+.ack-danger {
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
+  color: #ffd9d9;
+}
+
+.log-char {
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-family: var(--mono);
+}

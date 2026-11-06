@@ -6,7 +6,7 @@ import { describeCommand } from '../../protocol/zycela/describe';
 import { parseConsoleInput } from '../../state/lab';
 import type { ConsoleMode, LogEntry } from '../../state/lab';
 import { copyText, downloadText, timestampForFile } from '../../util/files';
-import { useAppData, useController, useLog, useReady } from '../AppContext';
+import { useAppData, useConnection, useController, useLog, useReady } from '../AppContext';
 import { Card, Field, Segmented, Toggle } from '../controls';
 import { useConfirm } from '../feedback';
 import { Icon } from '../Icon';
@@ -25,6 +25,22 @@ const KIND_LABEL: Record<LogEntry['kind'], string> = {
   error: 'ERROR',
 };
 
+const FFE2_OWNER = 'lab';
+
+const FFE2_STATUS: Record<string, string> = {
+  off: '',
+  pending: 'Se activará al conectar.',
+  on: 'Activo: lo que llegue por FFE2 se registra (sin interpretarlo).',
+  failed: 'El módulo o el navegador no dejaron escuchar FFE2.',
+};
+
+/** "0000ffe1-…" → "FFE1". */
+function charLabel(char: string | undefined): string | null {
+  if (!char) return null;
+  const m = /^0000(ff[0-9a-f]{2})-/i.exec(char);
+  return m ? m[1].toUpperCase() : char;
+}
+
 function time(iso: string): string {
   const d = new Date(iso);
   const p = (n: number, w = 2) => String(n).padStart(w, '0');
@@ -42,7 +58,14 @@ export function Lab() {
   const [error, setError] = useState<string | null>(null);
   const [showHex, setShowHex] = useState(false);
   const [marker, setMarker] = useState('');
+  const connection = useConnection();
+  const [listenFfe2, setListenFfe2] = useState(() => controller.session.ffe2WantedBy(FFE2_OWNER));
   const entries = useMemo(() => [...log].reverse().slice(0, 300), [log]);
+
+  const toggleFfe2 = (on: boolean) => {
+    setListenFfe2(on);
+    void (on ? controller.session.startSecondaryNotifications(FFE2_OWNER) : controller.session.stopSecondaryNotifications(FFE2_OWNER));
+  };
 
   /** The console goes through the same gates as Instalación and Restaurar. */
   const allowed = async (text: string): Promise<boolean> => {
@@ -163,6 +186,15 @@ export function Lab() {
             Parar [3700]
           </button>
         </div>
+        <Toggle
+          label="Escuchar también FFE2"
+          description={
+            FFE2_STATUS[connection.ffe2] ||
+            'El módulo declara notificaciones también en FFE2 (la característica de escritura). Lo que llegue se registra aparte y no se interpreta.'
+          }
+          checked={listenFfe2}
+          onChange={toggleFfe2}
+        />
         {controller.adapter instanceof MockAdapter && (
           <button
             type="button"
@@ -224,6 +256,7 @@ export function Lab() {
               <div className="log-head">
                 <span className="log-kind">{KIND_LABEL[entry.kind]}</span>
                 <time dateTime={entry.t}>{time(entry.t)}</time>
+                {entry.kind === 'rx' && charLabel(entry.char) && <span className="log-char">{charLabel(entry.char)}</span>}
                 {entry.kind === 'tx' && entry.withResponse === false && <span className="log-flag">sin respuesta</span>}
               </div>
               {entry.text !== undefined && <div className="log-text mono">{entry.text}</div>}

@@ -140,7 +140,15 @@ La sección *Más › Instalación* equivale a la pantalla «工厂设置» del 
 - **Códigos de modelo**: 8 + 8 interruptores. No se envía nada hasta pulsar «Enviar códigos» y confirmar. Un código equivocado hace que el módulo no entienda las señales del coche. Consulta el manual del kit para tu modelo.
 - **Tiras de LED y cableado**: cada cambio se envía al momento.
 - **Opciones peligrosas**: la orden `[4100]` («activar el menú de ambiente original del coche», «刷机») puede reprogramar algo del coche. Está oculta por defecto (se muestra desde *Ajustes de la app*), dentro de una sección plegada y detrás de dos confirmaciones con casilla de aceptación. **No la uses si no sabes exactamente qué hace en tu coche.**
-- *Restaurar ajustes de fábrica* (`[4200]`) devuelve el módulo a su configuración inicial; tus escenas guardadas en la app no se borran.
+- La app ya no tiene página de *Restaurar ajustes de fábrica*: `[4200]` borra también la instalación (códigos de modelo, LEDs y cableado). Para volver a dejarlo como estaba, usa *Copia de seguridad*.
+
+## Copia de seguridad
+
+*Más › Copia de seguridad* lee los ajustes del módulo (y, si se marca, la instalación en modo fábrica, solo lectura) y los guarda en este navegador. Trae incluida la copia «Tu configuración (6/11/2026)». Al restaurar, primero guarda una copia automática de cómo está el módulo, luego envía los ajustes con pausa entre órdenes y vuelve a leer el módulo para comprobarlos. La instalación solo se restaura si se marca aparte, dentro de `[2101]`…`[2100]`, y un código de coche distinto pide su propia confirmación. `[41…]` y `[42…]` nunca se envían desde aquí.
+
+## Pruebas del coche
+
+*Más › Pruebas del coche* es un asistente para averiguar qué lee el módulo del coche: botones de la radio, tiras animadas, intermitentes, puertas, bajada de brillo al arrancar, menú del iDrive y bienvenida (con cuenta atrás). Antes de empezar guarda una copia; cada prueba cambia lo justo y, al terminarla, restaura y comprueba. Si se corta la conexión, la restauración queda pendiente y se aplica al volver a conectar. Mientras haya una sesión abierta, un aviso en todas las pestañas permite continuar o terminar y restaurar. «Copiar informe» deja el resultado listo para pegar en el chat.
 
 ## Laboratorio
 

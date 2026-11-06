@@ -8,6 +8,11 @@
  * On ready: notifications on FFE1 are enabled, then "[0A01]" is written to
  * FFE2. Every GATT operation goes through the serial GattQueue.
  *
+ * Optionally (startSecondaryNotifications) the session also listens on FFE2,
+ * which the module declares as "notify" too. Those packets are only logged
+ * (rx with char = FFE2): they never reach the Framer or the parser, so they
+ * cannot corrupt the device state.
+ *
  * The module accepts a single connection, so the session takes care never to
  * leave a GATT link open that it does not track (a cancelled or timed-out
  * connect that succeeds late is closed again).
@@ -58,7 +63,14 @@ export interface SessionState {
   drops: number;
   withResponse: boolean | null;
   gatt: GattServiceInfo[];
+  /**
+   * Listening on FFE2: off (nobody asked), pending (asked, link not ready),
+   * on, or failed (the subscription was refused).
+   */
+  ffe2: Ffe2Status;
 }
+
+export type Ffe2Status = 'off' | 'pending' | 'on' | 'failed';
 
 export interface TxEvent {
   at: Date;
@@ -229,6 +241,8 @@ export class BleSession {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private stableTimer: ReturnType<typeof setTimeout> | null = null;
   private offDisconnect: (() => void) | null = null;
+  /** Who asked for FFE2 notifications (the lab toggle, the car tests…). */
+  private readonly ffe2Owners = new Set<string>();
 
   constructor(
     readonly adapter: BleAdapter,
@@ -251,6 +265,7 @@ export class BleSession {
       drops: 0,
       withResponse: null,
       gatt: [],
+      ffe2: 'off',
     });
   }
 
@@ -398,6 +413,8 @@ export class BleSession {
       if (this.establishingToken === token) this.establishingToken = null;
     }
     if (!ready || stale()) return;
+    if (this.ffe2Owners.size > 0) await this.subscribeSecondary();
+    if (stale()) return;
     // Ask for the full state, as the mini-program does right after connecting.
     await this.sendText('[0A01]').catch((error: unknown) => this.logError(bleErrorMessage(error, 'operation')));
   }
@@ -451,6 +468,78 @@ export class BleSession {
     for (const frame of frames) this.frames.emit(frame);
   }
 
+  /** FFE2 packets: logged only, never framed or parsed. */
+  private handleSecondaryData(data: Uint8Array): void {
+    this.rx.emit({ at: new Date(), bytes: data, text: fromBytes(data), char: ZYCELA_WRITE_CHAR, frames: [] });
+  }
+
+  /** true while someone asked for FFE2 notifications. */
+  get ffe2Wanted(): boolean {
+    return this.ffe2Owners.size > 0;
+  }
+
+  /** true while `owner` asked for FFE2 notifications. */
+  ffe2WantedBy(owner: string): boolean {
+    return this.ffe2Owners.has(owner);
+  }
+
+  /**
+   * Also listen for notifications on FFE2. `owner` lets several features ask
+   * independently (it stays on while any of them wants it). Re-applied after
+   * every reconnection while enabled. Never throws: a refusal is logged and
+   * shown as ffe2 = "failed".
+   */
+  async startSecondaryNotifications(owner = 'default'): Promise<void> {
+    const already = this.ffe2Owners.size > 0;
+    this.ffe2Owners.add(owner);
+    if (already && this.state.get().ffe2 === 'on') return;
+    await this.subscribeSecondary();
+  }
+
+  /** Stops FFE2 notifications once no owner wants them any more. */
+  async stopSecondaryNotifications(owner = 'default'): Promise<void> {
+    this.ffe2Owners.delete(owner);
+    if (this.ffe2Owners.size > 0) return;
+    const { status, device, ffe2 } = this.state.get();
+    this.setFfe2('off');
+    if (status !== 'ready' || !device || ffe2 !== 'on') return;
+    try {
+      await this.queue.run(() => this.adapter.stopNotifications(device.id, ZYCELA_SERVICE, ZYCELA_WRITE_CHAR), {
+        label: 'stop notify FFE2',
+        retries: 0,
+      });
+      this.info('Ya no se escucha FFE2');
+    } catch (error) {
+      if (!(error instanceof QueueClearedError)) this.logError(`No se pudo dejar de escuchar FFE2: ${bleErrorMessage(error, 'operation')}`);
+    }
+  }
+
+  private async subscribeSecondary(): Promise<void> {
+    const { status, device } = this.state.get();
+    if (status !== 'ready' || !device) {
+      this.setFfe2('pending');
+      return;
+    }
+    try {
+      await this.queue.run(
+        () =>
+          this.adapter.startNotifications(device.id, ZYCELA_SERVICE, ZYCELA_WRITE_CHAR, (data) => this.handleSecondaryData(data)),
+        { label: 'notify FFE2' },
+      );
+      if (this.ffe2Owners.size === 0) {
+        // Switched off while the subscription was being set up.
+        await this.adapter.stopNotifications(device.id, ZYCELA_SERVICE, ZYCELA_WRITE_CHAR).catch(() => undefined);
+        return;
+      }
+      this.setFfe2('on');
+      this.info('Escuchando también FFE2');
+    } catch (error) {
+      if (this.ffe2Owners.size === 0) return;
+      this.setFfe2('failed');
+      this.logError(`No se pudo escuchar FFE2: ${bleErrorMessage(error, 'operation')}`);
+    }
+  }
+
   private handleDisconnect(): void {
     const { status, device, drops } = this.state.get();
     // A late or repeated event while the link is actually up: nothing was lost.
@@ -458,14 +547,18 @@ export class BleSession {
     this.queue.clear('Desconectado');
     this.framer.reset();
     this.clearStableTimer();
-    if (this.establishingToken !== null) return; // establish() fails and handles it
-    if (this.userDisconnected) return; // disconnect() already set the status
-    if (status !== 'ready') return;
+    // FFE2 listening resumes after the next connection; folded into the status update below.
+    const ffe2: Ffe2Status = this.ffe2Owners.size > 0 ? 'pending' : 'off';
+    if (this.establishingToken !== null || this.userDisconnected || status !== 'ready') {
+      // establish() fails and handles it / disconnect() already set the status / nothing was up.
+      this.setFfe2(ffe2);
+      return;
+    }
     this.lostUnexpectedly = true;
     this.logError('Se perdió la conexión con el módulo');
     const count = drops + 1;
     if (!this.autoReconnect || !device) {
-      this.patch({ status: 'disconnected', drops: count, error: 'Se perdió la conexión con el módulo.' });
+      this.patch({ status: 'disconnected', drops: count, error: 'Se perdió la conexión con el módulo.', ffe2 });
       return;
     }
     if (count > this.maxDrops) {
@@ -475,11 +568,17 @@ export class BleSession {
         attempt: 0,
         drops: count,
         error: 'La conexión con el módulo se corta una y otra vez. Cierra el mini-programa de WeChat, comprueba que el módulo tiene corriente y vuelve a conectar.',
+        ffe2,
       });
       this.logError('Reconexión abandonada: demasiados cortes seguidos');
       return;
     }
-    this.scheduleReconnect(1, { drops: count });
+    this.scheduleReconnect(1, { drops: count, ffe2 });
+  }
+
+  /** Updates the FFE2 status only when it changes (no spurious state notifications). */
+  private setFfe2(ffe2: Ffe2Status): void {
+    if (this.state.get().ffe2 !== ffe2) this.patch({ ffe2 });
   }
 
   /** `extra` is merged into the same state update (one notification per transition). */
@@ -551,7 +650,7 @@ export class BleSession {
     const device = this.state.get().device;
     if (device) await this.safeDisconnect(device.id);
     this.framer.reset();
-    this.patch({ status: 'disconnected', attempt: 0, error: null, drops: 0 });
+    this.patch({ status: 'disconnected', attempt: 0, error: null, drops: 0, ffe2: this.ffe2Owners.size > 0 ? 'pending' : 'off' });
     this.info('Desconectado');
   }
 

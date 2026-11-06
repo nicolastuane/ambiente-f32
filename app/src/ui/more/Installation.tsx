@@ -2,10 +2,11 @@
  * Installer settings (the mini-program's "factory settings" page). Entering
  * sends [2101]; leaving (back, tab change, unmount) sends [2100].
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { LED_STRIPS, WIRING, carModelForBits } from '../../protocol/zycela/catalog';
 import type { BinaryValue } from '../../protocol/zycela/commands';
 import { dialCodes } from '../../protocol/zycela/commands';
+import { acquireLock, enterFactoryModeMarked, leaveFactoryMode, lockHolder, onLockChange } from '../../state/backup';
 import { useAppData, useConnection, useController, useDevice, useReady } from '../AppContext';
 import { Card, Field, Notice, Segmented, Spinner, Stepper } from '../controls';
 import { useConfirm } from '../feedback';
@@ -65,17 +66,37 @@ function FactoryPanel() {
   const [customer, setCustomer] = useState('');
   const customerTouched = useRef(false);
 
-  // Enter factory mode on mount (and again after a reconnection); leave it on
-  // unmount, which also happens when the user switches tabs.
-  useEffect(() => {
-    if (ready) controller.run((d) => d.enterFactoryMode());
-  }, [controller, ready]);
-  useEffect(
-    () => () => {
-      if (controller.session.ready) controller.run((d) => d.exitFactoryMode());
-    },
-    [controller],
+  // Factory mode belongs to this page while it is open: it holds the factory
+  // lock, so no backup, restore or car test can send [2100] under it (they
+  // wait). It enters with [2101] (and again after a reconnection) and leaves
+  // with [2100] on unmount, which also happens when the user switches tabs;
+  // if the link is down then, [2100] goes out on the next connection.
+  const [held, setHeld] = useState(false);
+  const holder = useSyncExternalStore(
+    (listener) => onLockChange(controller, 'factory', listener),
+    () => lockHolder(controller, 'factory'),
   );
+  useEffect(() => {
+    let cancelled = false;
+    let release: (() => void) | null = null;
+    void acquireLock(controller, 'factory', 'Instalación').then((free) => {
+      if (cancelled) {
+        free();
+        return;
+      }
+      release = free;
+      setHeld(true);
+    });
+    return () => {
+      cancelled = true;
+      const free = release;
+      release = null;
+      if (free) void leaveFactoryMode(controller).finally(free);
+    };
+  }, [controller]);
+  useEffect(() => {
+    if (ready && held) controller.run(() => enterFactoryModeMarked(controller));
+  }, [controller, ready, held]);
 
   useEffect(() => {
     if (!customerTouched.current && factory.customerCode !== null) setCustomer(String(factory.customerCode));
@@ -157,14 +178,16 @@ function FactoryPanel() {
   return (
     <>
       <div className="factory-bar" role="status">
-        <Icon name="wrench" size={18} />
+        {held ? <Icon name="wrench" size={18} /> : <Spinner />}
         <span>
-          Modo fábrica {ready ? 'activo' : 'sin conexión'}
-          {received.length > 0 && <span className="hint"> · recibido: {received.join(', ')}</span>}
+          {!held
+            ? `Esperando a que termine otra operación del módulo${holder ? ` (${holder})` : ''}…`
+            : `Modo fábrica ${ready ? 'activo' : 'sin conexión'}`}
+          {held && received.length > 0 && <span className="hint"> · recibido: {received.join(', ')}</span>}
         </span>
       </div>
 
-      <fieldset className="controls" disabled={!ready}>
+      <fieldset className="controls" disabled={!ready || !held}>
         <legend className="sr-only">Instalación</legend>
         <Card
           title="Códigos de modelo"

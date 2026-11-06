@@ -197,6 +197,30 @@ export class AppController {
     this.session.onVisible();
   }
 
+  // -------------------------------------------------------------------------
+  // Debug mode ([3702] / [3700]), shared by the experiment and the car tests
+
+  private readonly debugOwners = new Set<string>();
+
+  /** Turns the module's debug output on for `owner` ([3702] every time: the module may have restarted). */
+  startDebugFor(owner: string): Promise<void> {
+    this.debugOwners.add(owner);
+    return this.driver.startDebug();
+  }
+
+  /** Releases `owner`; [3700] only once nobody else wants debug. Resolves true when [3700] was sent. */
+  async stopDebugFor(owner: string): Promise<boolean> {
+    this.debugOwners.delete(owner);
+    if (this.debugOwners.size > 0) return false;
+    await this.driver.stopDebug();
+    return true;
+  }
+
+  /** Forgets `owner` without sending anything (its session ended while the link was down). */
+  releaseDebug(owner: string): void {
+    this.debugOwners.delete(owner);
+  }
+
   /** Runs a driver action and reports failures as a toast. */
   run(action: (driver: ZycelaDriver) => Promise<unknown> | void): void {
     try {

@@ -1,11 +1,14 @@
 /**
- * Keeps the screen on during the experiment when the browser allows it: the
- * Screen Wake Lock API, and Bluefy's own `bluetooth.setScreenDimEnabled`
- * (undocumented; feature-detected and called defensively). iOS drops a wake
- * lock when the page is hidden, so keepAwake(true) is called again on return.
+ * Keeps the screen on while a guided session needs it, when the browser
+ * allows it: the Screen Wake Lock API, and Bluefy's own
+ * `bluetooth.setScreenDimEnabled` (undocumented; feature-detected and called
+ * defensively). Several features can ask at once (the experiment, the car
+ * tests): the screen stays on while any owner wants it. iOS drops a wake lock
+ * when the page is hidden, so refreshWakeLock() asks again on return.
  */
 let lock: WakeLockSentinel | null = null;
 let wanted = false;
+const owners = new Set<string>();
 
 type BluefyBluetooth = { setScreenDimEnabled?: (enabled: boolean) => unknown };
 
@@ -18,7 +21,7 @@ function bluefy(enabled: boolean): void {
   }
 }
 
-export function keepAwake(on: boolean): void {
+function apply(on: boolean): void {
   if (on !== wanted) bluefy(!on);
   wanted = on;
   if (!on) {
@@ -40,7 +43,21 @@ export function keepAwake(on: boolean): void {
   }
 }
 
+/** `owner` wants the screen on (or not any more); it stays on while any owner wants it. */
+export function keepAwake(owner: string, on: boolean): void {
+  const had = owners.has(owner);
+  if (on === had && on === wanted) return;
+  if (on) owners.add(owner);
+  else owners.delete(owner);
+  apply(owners.size > 0);
+}
+
+/** true while some owner wants the screen on. */
+export function wakeLockWanted(): boolean {
+  return owners.size > 0;
+}
+
 /** Re-requests the lock after the page becomes visible again (iOS releases it when hidden). */
 export function refreshWakeLock(): void {
-  if (wanted) keepAwake(true);
+  if (owners.size > 0) apply(true);
 }

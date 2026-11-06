@@ -75,8 +75,8 @@ function runnerFor(controller: AppController): ExperimentRunner {
       isReady: () => controller.session.status === 'ready',
       addMarker: (note) => controller.addMarker(note),
       requestState: () => controller.driver.requestState(),
-      startDebug: () => controller.driver.startDebug(),
-      stopDebug: () => controller.driver.stopDebug(),
+      startDebug: () => controller.startDebugFor('experiment'),
+      stopDebug: () => controller.stopDebugFor('experiment'),
       onReady: (listener) => {
         let previous = controller.session.status;
         return controller.session.state.subscribe(() => {
@@ -94,7 +94,10 @@ function runnerFor(controller: AppController): ExperimentRunner {
         lastCue = s.stepStartedAt;
         if (s.sound) beep();
       }
-      keepAwake(s.phase === 'running' || s.phase === 'settling');
+      const active = s.phase === 'running' || s.phase === 'settling';
+      keepAwake('experiment', active);
+      // Debug is shared with the car tests: forget this owner once the experiment is over.
+      if (!active) controller.releaseDebug('experiment');
     });
     runners.set(controller, created);
     runner = created;

@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
+import { guardFactoryExit } from './state/backup';
 import { AppProvider, useConnection, useController, useDevice } from './ui/AppContext';
 import { ConnectionPill, NoBluetoothBanner } from './ui/connection';
 import { ConfirmProvider, Toasts } from './ui/feedback';
+import { CarTestsBanner, carTestsFor } from './ui/more/CarTests';
 import { Icon } from './ui/Icon';
 import type { IconName } from './ui/Icon';
 import { BrightnessTab } from './ui/tabs/BrightnessTab';
 import { CarTab } from './ui/tabs/CarTab';
 import { ColorTab } from './ui/tabs/ColorTab';
 import { EffectsTab } from './ui/tabs/EffectsTab';
+import { moreRequest } from './ui/nav';
 import { MoreTab } from './ui/tabs/MoreTab';
 
 type Tab = 'color' | 'effects' | 'brightness' | 'car' | 'more';
@@ -37,6 +40,22 @@ function Shell() {
   const device = useDevice();
   const conn = useConnection();
   const [tab, setTab] = useState<Tab>(readTab);
+
+  // Created with the app, not with the page: a pending restore of the car
+  // tests is applied on reconnection wherever the user is.
+  // Same for a [2100] owed because the page was closed (or the link dropped)
+  // in factory mode.
+  carTestsFor(controller);
+  guardFactoryExit(controller);
+
+  // A banner asked for a page of «Más» (e.g. «Continuar» the car tests).
+  useEffect(
+    () =>
+      moreRequest.subscribe(() => {
+        if (moreRequest.get()) setTab('more');
+      }),
+    [],
+  );
 
   useEffect(() => {
     try {
@@ -71,6 +90,7 @@ function Shell() {
       <main id="main" className="main" aria-label={active.label}>
         <h1 className="sr-only">{active.label}</h1>
         <NoBluetoothBanner />
+        <CarTestsBanner />
         {tab === 'color' && <ColorTab />}
         {tab === 'effects' && <EffectsTab />}
         {tab === 'brightness' && <BrightnessTab />}

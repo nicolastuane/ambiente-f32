@@ -88,6 +88,11 @@ export class ZycelaDriver {
     this.scenePacingMs = options.scenePacingMs ?? 150;
   }
 
+  /** Pause the driver keeps between the commands of a sequence (scenes, restores). */
+  get pacingMs(): number {
+    return this.scenePacingMs;
+  }
+
   /** Sends one command string (already encoded). */
   send(command: string): Promise<void> {
     this.options.onCommand?.(command);

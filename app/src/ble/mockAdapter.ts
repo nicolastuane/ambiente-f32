@@ -27,6 +27,8 @@ export class MockAdapter implements BleAdapter {
   private connected = false;
   private unreachableUntil = 0;
   private notify: ((data: Uint8Array) => void) | null = null;
+  /** FFE2 subscription (the real module declares notify on FFE2 too; the simulated one stays silent). */
+  private notifyWrite: ((data: Uint8Array) => void) | null = null;
   private readonly disconnectListeners = new Set<() => void>();
   private connectDelayMs: number;
   private readonly latencyMs: number;
@@ -68,7 +70,21 @@ export class MockAdapter implements BleAdapter {
     this.unreachableUntil = Date.now() + unreachableMs;
     this.connected = false;
     this.notify = null;
+    this.notifyWrite = null;
     this.device.stop();
+  }
+
+  /** true while the app is subscribed to FFE2 notifications (tests). */
+  get listeningOnWriteChar(): boolean {
+    return this.connected && this.notifyWrite !== null;
+  }
+
+  /** Emits a notification on FFE2, as the real module might (tests). Returns false when nobody listens. */
+  emitOnWriteChar(data: Uint8Array | string): boolean {
+    if (!this.connected || !this.notifyWrite) return false;
+    const bytes = typeof data === 'string' ? Uint8Array.from(data, (c) => c.charCodeAt(0) & 0xff) : data;
+    this.notifyWrite(bytes);
+    return true;
   }
 
   getKnownDevices(): Promise<BleDeviceInfo[]> {
@@ -100,6 +116,7 @@ export class MockAdapter implements BleAdapter {
   private dropLink(): void {
     this.connected = false;
     this.notify = null;
+    this.notifyWrite = null;
     this.device.stop();
     // Web Bluetooth fires gattserverdisconnected for user disconnects too.
     for (const listener of [...this.disconnectListeners]) listener();
@@ -110,9 +127,10 @@ export class MockAdapter implements BleAdapter {
     if (!this.connected) throw bleError('NetworkError', 'Not connected');
     if (service !== ZYCELA_SERVICE) throw bleError('NotFoundError', 'No such service');
     if (characteristic === ZYCELA_WRITE_CHAR) {
+      // Like the real module (protocolo-zycela.md §6): FFE2 also declares notify.
       return {
         uuid: characteristic,
-        properties: { read: false, write: true, writeWithoutResponse: true, notify: false, indicate: false },
+        properties: { read: false, write: true, writeWithoutResponse: true, notify: true, indicate: false },
       };
     }
     if (characteristic === ZYCELA_NOTIFY_CHAR) {
@@ -145,12 +163,17 @@ export class MockAdapter implements BleAdapter {
   ): Promise<void> {
     await delay(Math.round(this.latencyMs / 4));
     if (!this.connected) throw bleError('NetworkError', 'Not connected');
+    if (characteristic === ZYCELA_WRITE_CHAR) {
+      this.notifyWrite = callback;
+      return;
+    }
     if (characteristic !== ZYCELA_NOTIFY_CHAR) throw bleError('NotSupportedError', 'Characteristic does not notify');
     this.notify = callback;
   }
 
-  async stopNotifications(): Promise<void> {
-    this.notify = null;
+  async stopNotifications(_deviceId?: string, _service?: string, characteristic?: string): Promise<void> {
+    if (characteristic === ZYCELA_WRITE_CHAR) this.notifyWrite = null;
+    else this.notify = null;
   }
 
   onDisconnect(_deviceId: string, callback: () => void): () => void {
