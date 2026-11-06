@@ -17,16 +17,29 @@ export interface ExperimentStep {
 }
 
 export const CAR_EVENT_STEPS: readonly ExperimentStep[] = [
-  { id: 'baseline', title: 'Punto de partida', detail: 'Coche desbloqueado, motor apagado y sin contacto. No toques nada.' },
-  { id: 'door', title: 'Abrir y cerrar la puerta', detail: 'Abre la puerta del conductor, espera 3 segundos y ciérrala.' },
+  {
+    id: 'baseline',
+    title: 'Punto de partida',
+    detail:
+      'Estás dentro con la puerta cerrada, el motor apagado, sin contacto y el mando de luces en 0 (apagado). No toques nada durante unos segundos.',
+  },
+  { id: 'door', title: 'Abrir y cerrar la puerta', detail: 'Abre la puerta del conductor, espera 3 segundos y vuelve a cerrarla.' },
   { id: 'ignition', title: 'Poner el contacto', detail: 'Pulsa START sin pisar el freno: contacto puesto, motor apagado.' },
   { id: 'engine', title: 'Arrancar el motor', detail: 'Pisa el freno y pulsa START.' },
-  { id: 'lights', title: 'Luces de cruce', detail: 'Enciende las luces de cruce (o déjalas en automático si ya es de noche).' },
+  {
+    id: 'lights',
+    title: 'Luces de cruce',
+    detail: 'Gira el mando de luces a luces de cruce (faros encendidos). Si el coche ya las encendió solo, déjalas así.',
+  },
   { id: 'turn', title: 'Intermitente', detail: 'Pon el intermitente izquierdo 3 segundos y quítalo.' },
   { id: 'reverse', title: 'Marcha atrás', detail: 'Con el freno pisado, pon marcha atrás 3 segundos y vuelve a P.' },
   { id: 'engineOff', title: 'Apagar el motor', detail: 'Apaga el motor con START. No abras la puerta todavía.' },
-  { id: 'lock', title: 'Bajar y bloquear', detail: 'Baja, cierra y bloquea con la llave. Si el móvil se desconecta, es normal: sigue.' },
-  { id: 'unlock', title: 'Desbloquear', detail: 'Espera 10 segundos y desbloquea con la llave.' },
+  {
+    id: 'lock',
+    title: 'Bajar y bloquear',
+    detail: 'Baja, cierra la puerta y bloquea con la llave. Si el móvil se desconecta, es normal: sigue.',
+  },
+  { id: 'unlock', title: 'Desbloquear', detail: 'Espera 10 segundos fuera y desbloquea con la llave.' },
 ];
 
 export interface StateChange {
@@ -64,6 +77,8 @@ export interface ExperimentState {
   startedAt: string | null;
   debug: boolean;
   requestState: boolean;
+  /** Beep when a new step starts. */
+  sound: boolean;
   results: StepResult[];
 }
 
@@ -169,8 +184,14 @@ function initialState(steps: readonly ExperimentStep[]): ExperimentState {
     startedAt: null,
     debug: true,
     requestState: true,
+    sound: true,
     results: [],
   };
+}
+
+/** Options the user chooses before starting; they survive "Repetir". */
+function optionsOf(s: ExperimentState): Pick<ExperimentState, 'debug' | 'requestState' | 'sound'> {
+  return { debug: s.debug, requestState: s.requestState, sound: s.sound ?? true };
 }
 
 export class ExperimentRunner {
@@ -194,15 +215,20 @@ export class ExperimentRunner {
     if (deps.persist) this.state.subscribe(() => deps.persist?.save(this.state.get()));
   }
 
-  setOptions(options: { debug?: boolean; requestState?: boolean }): void {
+  setOptions(options: { debug?: boolean; requestState?: boolean; sound?: boolean }): void {
     this.state.update((s) => (s.phase === 'idle' ? { ...s, ...options } : s));
+  }
+
+  /** How long the app keeps listening after "Ya lo hice" (for the progress bar). */
+  listenMs(): number {
+    return this.settleMs + (this.state.get().requestState ? this.responseMs : 0);
   }
 
   async start(): Promise<void> {
     const s = this.state.get();
     if (s.phase !== 'idle' && s.phase !== 'finished') return;
     const now = new Date().toISOString();
-    this.state.set({ ...initialState(s.steps), debug: s.debug, requestState: s.requestState, phase: 'running', startedAt: now });
+    this.state.set({ ...initialState(s.steps), ...optionsOf(s), phase: 'running', startedAt: now });
     this.deps.addMarker('Experimento: inicio');
     if (s.debug && this.deps.isReady()) await this.deps.startDebug().catch(() => undefined);
     this.snapshot = this.deps.device.get();
@@ -262,7 +288,7 @@ export class ExperimentRunner {
   reset(): void {
     const s = this.state.get();
     this.snapshot = null;
-    this.state.set({ ...initialState(s.steps), debug: s.debug, requestState: s.requestState });
+    this.state.set({ ...initialState(s.steps), ...optionsOf(s) });
   }
 }
 

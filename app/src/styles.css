@@ -1753,3 +1753,189 @@ textarea.text-input {
   color: var(--text-muted);
   font-size: 15px;
 }
+
+/* Experimento: señal de «ahora haz esto» */
+.exp-before {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.exp-dots {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.exp-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface-3);
+}
+
+.exp-dot-done {
+  background: var(--ok);
+}
+
+.exp-dot-skipped {
+  background: var(--text-dim);
+}
+
+.exp-dot-current {
+  background: var(--accent);
+  animation: exp-dot-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes exp-dot-pulse {
+  50% {
+    transform: scale(1.5);
+    box-shadow: 0 0 0 4px rgb(108 184 255 / 0.25);
+  }
+}
+
+.exp-registered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  color: var(--ok);
+  font-size: 14px;
+  font-weight: 600;
+  animation: exp-registered 2.4s ease forwards;
+}
+
+@keyframes exp-registered {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  12%,
+  70% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+
+.exp-enter {
+  margin-bottom: 12px;
+  animation: exp-enter 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes exp-enter {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.exp-step {
+  border-width: 2px;
+}
+
+.exp-step-now {
+  border-color: var(--accent-strong);
+  animation: exp-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes exp-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(61 156 255 / 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgb(61 156 255 / 0);
+  }
+}
+
+.exp-step-listening {
+  border-color: var(--border-strong);
+}
+
+.exp-step-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.exp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.exp-badge-now {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+
+.exp-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: exp-blink 1s steps(2, start) infinite;
+}
+
+@keyframes exp-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.exp-badge-wait {
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+.exp-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.exp-progress span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  animation: exp-fill linear forwards;
+}
+
+@keyframes exp-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.exp-done {
+  min-height: 56px;
+  font-size: 18px;
+}
