@@ -273,7 +273,22 @@ El "flasheo OBD" (`[4100]`) solo aparece en la tabla para Audi, Volkswagen y Mer
 - **Zona 1 (分区一, comando `[10…]`):** HC1–HC3 y LED1–LED2 de la caja principal, más LED1–LED2 de cada puerta. Es decir: salpicadero, volante, tiradores y contornos.
 - **Zona 2 (分区二, comando `[09…]`):** LED3 de la caja principal y de cada puerta. Es decir: pies y portaobjetos.
 
-## 6. Contraseñas del mini-programa
+## 6. Pruebas en el coche (BMW F32, 2026-11-06)
+
+Módulo `ZYCL-FWD-41A0`: hardware V7.10, código ZY45542, firmware 251121-023, trama de estado `4E`. Las características `ffe1` y `ffe2` declaran ambas `write`, `writeWithoutResponse` y `notify`.
+
+Hicimos un experimento guiado de 10 pasos con la app: punto de partida, abrir y cerrar la puerta, contacto, arrancar, luces de cruce, intermitente, marcha atrás, apagar, bajar y bloquear, desbloquear. La depuración `[3702]` estuvo activada y después de cada paso la app pedía el estado con `[0A01]`. Resultado:
+
+- **El módulo no envía nada por su cuenta.** En ningún paso hubo notificaciones espontáneas, ni siquiera con `[3702]`, que tampoco tuvo ninguna respuesta. Solo contesta cuando se le pregunta.
+- **Su estado no cambia con el coche.** Las tramas `4E`, `26`, `27` y `13` fueron idénticas en los 10 pasos, también al arrancar con las luces encendidas. Lo que haga por dentro (la consola a mitad de brillo de noche, la bienvenida, el aviso de puerta) no se refleja en lo que informa.
+- **La conexión no se cortó al bloquear** el coche. Siguió conectada al menos 20 segundos después. Se perdió unos 30 minutos más tarde.
+- Conclusión: el móvil no puede saber por el módulo si el coche está con contacto o en marcha. Las reacciones a eventos del coche solo existen dentro del módulo, con las opciones de la sección 3.7.
+
+Trama de estado real: `[4E001801FF1000FF11010904010300090800]`. Modo RGB 0, efecto 24, color `#FF1000`, brillos 9/9/4, sensibilidad 1, velocidad de efectos 3, control coche + móvil. Las posiciones 7–8 valen `01`; quizá sea el encendido (**no confirmado**).
+
+En la trama `26` la fuente de sonido vale `FF`. El mini-programa no trata ese valor de forma especial: simplemente no marca ninguna de las dos opciones.
+
+## 7. Contraseñas del mini-programa
 - `1689`: ajustes de fábrica.
 - `6666`: modo de depuración (consola de comandos).
 

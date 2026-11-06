@@ -50,6 +50,22 @@ Los otros códigos BMW de la tabla, por si alguna vez hiciera falta probar otro 
 
 La tabla no explica los 8 interruptores de **功能拨码** (funciones). Todos apagados es lo normal.
 
+## Ajustes de uso que tenía el módulo (2026-11-06)
+
+Leídos por la app (`ZYCL-FWD-41A0`, firmware 251121-023):
+
+| Ajuste | Valor |
+|---|---|
+| Color | `#FF1000` fijo |
+| Brillo | global 9, contorno 9, pies 4 (zonas arriba/abajo) |
+| Consola a mitad de brillo de noche | **activada** (probablemente es lo que baja la luz al arrancar con las luces encendidas) |
+| Control | coche + móvil |
+| Bienvenida | activada, «4 puertas a la vez ③», color cian |
+| Aviso de puerta abierta | activado |
+| Aire acondicionado | activado |
+| Radar, velocidad, intermitentes | desactivados (el coche los admite) |
+| Ángulo muerto | no admitido |
+
 ## Antes de enviar comandos
 
 Antes de enviar cualquiera de estos comandos hay que entrar en el modo fábrica con `[2101]`, y al terminar salir con `[2100]`. La app nueva lo hace sola en su pantalla "Instalación".
