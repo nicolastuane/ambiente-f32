@@ -79,6 +79,8 @@ export interface ExperimentDeps {
   settleMs?: number;
   /** Time to wait for the answer to the state request. */
   responseMs?: number;
+  /** Keeps the results when iOS closes the page (Bluefy in the background). */
+  persist?: { load(): ExperimentState | null; save(state: ExperimentState): void };
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -184,6 +186,12 @@ export class ExperimentRunner {
     this.state = createStore(initialState(steps));
     this.settleMs = deps.settleMs ?? 2000;
     this.responseMs = deps.responseMs ?? 1500;
+    const saved = deps.persist?.load();
+    if (saved && Array.isArray(saved.results) && saved.results.length > 0) {
+      // A page reload cannot resume the timers: show what was recorded as a finished experiment.
+      this.state.set({ ...initialState(steps), ...saved, steps, phase: 'finished', stepStartedAt: null });
+    }
+    if (deps.persist) this.state.subscribe(() => deps.persist?.save(this.state.get()));
   }
 
   setOptions(options: { debug?: boolean; requestState?: boolean }): void {

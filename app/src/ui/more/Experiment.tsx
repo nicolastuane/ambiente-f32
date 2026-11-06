@@ -2,7 +2,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import type { AppController } from '../../state/controller';
 import { ExperimentRunner, describeCount, experimentSummary } from '../../state/experiment';
-import type { StepResult } from '../../state/experiment';
+import type { ExperimentState, StepResult } from '../../state/experiment';
 import { copyText } from '../../util/files';
 import { useConnection, useController, useDevice, useLog, useReady } from '../AppContext';
 import { Card, Toggle } from '../controls';
@@ -10,6 +10,28 @@ import { Icon } from '../Icon';
 
 /** One runner per controller, so leaving the page does not lose a running experiment. */
 const runners = new WeakMap<AppController, ExperimentRunner>();
+
+const STORAGE_KEY = 'ambiente-f32.experiment.v1';
+
+/** The last experiment survives iOS closing Bluefy; storage errors (quota, private mode) are ignored. */
+const persist = {
+  load(): ExperimentState | null {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as ExperimentState) : null;
+    } catch {
+      return null;
+    }
+  },
+  save(state: ExperimentState): void {
+    try {
+      if (state.phase === 'idle' && state.results.length === 0) localStorage.removeItem(STORAGE_KEY);
+      else localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      // Not critical: the results stay on screen while the page is open.
+    }
+  },
+};
 
 function runnerFor(controller: AppController): ExperimentRunner {
   let runner = runners.get(controller);
@@ -22,6 +44,7 @@ function runnerFor(controller: AppController): ExperimentRunner {
       requestState: () => controller.driver.requestState(),
       startDebug: () => controller.driver.startDebug(),
       stopDebug: () => controller.driver.stopDebug(),
+      persist,
     });
     runners.set(controller, runner);
   }
@@ -85,9 +108,9 @@ export function Experiment() {
       {state.phase === 'idle' && (
         <Card title="Eventos del coche" icon="flask" subtitle="Averigua qué avisa el módulo cuando abres, pones el contacto o arrancas.">
           <p className="hint">
-            Te guío paso a paso. En cada paso haces una cosa en el coche y pulsas «Hecho». La app apunta lo que el módulo
-            envía por su cuenta, le pide el estado y compara con el paso anterior. Al final copias el resumen y me lo pegas en
-            el chat.
+            Te guío paso a paso. En cada paso, <strong>primero haces la acción en el coche</strong> y, cuando ya la hiciste,
+            pulsas «Ya lo hice». La app apunta lo que el módulo envía por su cuenta, le pide el estado y compara con el paso
+            anterior. Al final copias el resultado y me lo pegas en el chat.
           </p>
           <ol className="exp-steps">
             {state.steps.map((s) => (
@@ -116,7 +139,12 @@ export function Experiment() {
 
       {running && step && (
         <Card title={`Paso ${state.current + 1} de ${state.steps.length}`} icon="car" subtitle={step.title}>
-          <p className="exp-instruction">{step.detail}</p>
+          <ol className="exp-howto">
+            <li>
+              <span className="exp-instruction">{step.detail}</span>
+            </li>
+            <li>Cuando ya lo hayas hecho, pulsa «Ya lo hice».</li>
+          </ol>
           <p className="hint" aria-live="polite">
             {state.phase === 'settling'
               ? 'Escuchando lo que envía el módulo…'
@@ -134,7 +162,7 @@ export function Experiment() {
             onClick={() => void runner.complete()}
           >
             <Icon name="check" size={18} />
-            {state.phase === 'settling' ? 'Un momento…' : 'Hecho'}
+            {state.phase === 'settling' ? 'Un momento…' : 'Ya lo hice'}
           </button>
           <div className="row-actions">
             <button type="button" className="btn" disabled={state.phase === 'settling'} onClick={() => void runner.complete(true)}>

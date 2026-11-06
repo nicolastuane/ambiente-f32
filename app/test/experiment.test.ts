@@ -4,6 +4,7 @@ import { carModelForBits } from '../src/protocol/zycela/catalog';
 import { initialDeviceState } from '../src/protocol/zycela/state';
 import { AppController } from '../src/state/controller';
 import { ExperimentRunner, diffStates, experimentSummary } from '../src/state/experiment';
+import type { ExperimentState } from '../src/state/experiment';
 import { waitFor } from './helpers';
 
 const controllers: AppController[] = [];
@@ -87,6 +88,36 @@ describe('ExperimentRunner with the demo module', () => {
     expect(text).toContain('2. Paso B');
     expect(text).toContain('Brillo 1: ');
     expect(text).toContain('3. Paso C: saltado');
+  });
+
+  it('keeps the results across a page reload, shown as finished', async () => {
+    const { controller } = await connected();
+    let saved: ExperimentState | null = null;
+    const persist = { load: () => saved, save: (s: ExperimentState) => (saved = JSON.parse(JSON.stringify(s))) };
+    const deps = {
+      log: controller.log,
+      device: controller.device,
+      isReady: () => controller.session.status === 'ready',
+      addMarker: (note: string) => controller.addMarker(note),
+      requestState: () => controller.driver.requestState(),
+      startDebug: () => controller.driver.startDebug(),
+      stopDebug: () => controller.driver.stopDebug(),
+      settleMs: 10,
+      responseMs: 60,
+      persist,
+    };
+    const first = new ExperimentRunner(deps);
+    await first.start();
+    await first.complete();
+    expect(first.state.get().phase).toBe('running'); // iOS closes the page here
+
+    const reloaded = new ExperimentRunner(deps);
+    expect(reloaded.state.get().phase).toBe('finished');
+    expect(reloaded.state.get().results.map((r) => r.step.id)).toEqual(['baseline']);
+    expect(reloaded.state.get().results[0].response.length).toBeGreaterThan(0);
+
+    reloaded.reset();
+    expect(new ExperimentRunner(deps).state.get().phase).toBe('idle');
   });
 
   it('can be finished early and reset', async () => {

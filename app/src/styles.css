@@ -1743,3 +1743,13 @@ textarea.text-input {
   color: var(--text-muted);
   font-size: 13px;
 }
+
+.exp-howto {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
