@@ -243,6 +243,11 @@ export class ZycelaMockDevice {
     for (const frame of this.framer.push(fromBytes(bytes))) this.handle(frame);
   }
 
+  /** Sends a frame on the module's own initiative, as a car event might (tests). */
+  announce(frame: string): void {
+    this.respond(frame);
+  }
+
   /** Cancels pending responses (on disconnect). */
   stop(): void {
     for (const timer of this.timers) clearTimeout(timer);

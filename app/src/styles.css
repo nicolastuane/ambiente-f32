@@ -1687,6 +1687,16 @@ textarea.text-input {
 }
 
 /* Experimento: eventos del coche */
+.exp-before {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
 .exp-steps {
   margin: 0;
   padding-left: 22px;
@@ -1695,10 +1705,271 @@ textarea.text-input {
   line-height: 1.6;
 }
 
+.exp-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-margin-top: calc(72px + var(--safe-top));
+  scroll-margin-bottom: calc(80px + var(--safe-bottom));
+}
+
+.exp-dots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.exp-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface-3);
+}
+
+.exp-dot-done {
+  background: var(--ok);
+}
+
+.exp-dot-skipped {
+  background: var(--text-dim);
+}
+
+.exp-dot-current {
+  background: var(--accent);
+  animation: exp-dot-pulse 1.2s ease-in-out infinite;
+}
+
+/* Transform and opacity only: the compositor animates them without repainting. */
+@keyframes exp-dot-pulse {
+  50% {
+    transform: scale(1.6);
+    opacity: 0.6;
+  }
+}
+
+.exp-registered {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 4px 4px 4px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 14px;
+  font-weight: 600;
+  animation: exp-registered 0.5s ease;
+}
+
+.exp-registered-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.exp-registered-ok {
+  color: var(--ok);
+}
+
+.exp-registered-warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.exp-registered-neutral {
+  color: var(--text-muted);
+}
+
+@keyframes exp-registered {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.exp-undo {
+  min-height: var(--tap);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.exp-enter {
+  animation: exp-enter 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Vertical entrance: a horizontal offset would widen the page for a moment on iOS. */
+@keyframes exp-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+}
+
+.exp-step {
+  position: relative;
+  border-width: 2px;
+}
+
+.exp-step-now {
+  border-color: var(--accent-strong);
+}
+
+/* Glow drawn once on a pseudo-element; only its opacity is animated. */
+.exp-step-now::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 7px rgb(61 156 255 / 0.35);
+  opacity: 0;
+  pointer-events: none;
+  animation: exp-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes exp-glow {
+  50% {
+    opacity: 1;
+  }
+}
+
+.exp-step-listening {
+  border-color: var(--border-strong);
+}
+
+.exp-step-offline {
+  border-color: var(--warn);
+}
+
+.exp-step-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--text);
+}
+
 .exp-instruction {
   margin: 0;
   font-size: 17px;
   line-height: 1.45;
+  color: var(--text);
+}
+
+.exp-offline-hint {
+  color: var(--warn);
+}
+
+.exp-howto {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.exp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.exp-badge-now {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+
+.exp-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: exp-blink 1s steps(2, start) infinite;
+}
+
+@keyframes exp-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.exp-badge-wait {
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+.exp-badge-offline {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.exp-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.exp-progress span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform 0.2s linear;
+}
+
+.exp-progress-wait span {
+  background: repeating-linear-gradient(90deg, var(--accent) 0 12px, var(--accent-strong) 12px 24px);
+  background-size: 48px 100%;
+  animation: exp-wait 0.8s linear infinite;
+}
+
+@keyframes exp-wait {
+  to {
+    background-position: 48px 0;
+  }
+}
+
+.exp-done {
+  min-height: 56px;
+  font-size: 18px;
+}
+
+/* Fixed height so arriving frames never move the buttons above. */
+.exp-live {
+  height: calc(13px * 1.45 * 4 + 6px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exp-live-count,
+.exp-live-line {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exp-live-count {
+  color: var(--text-dim);
+}
+
+.exp-live-line {
   color: var(--text);
 }
 
@@ -1744,198 +2015,19 @@ textarea.text-input {
   font-size: 13px;
 }
 
-.exp-howto {
-  margin: 0;
-  padding-left: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 15px;
-}
-
-/* Experimento: señal de «ahora haz esto» */
-.exp-before {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 15px;
-  line-height: 1.45;
-}
-
-.exp-dots {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-}
-
-.exp-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--surface-3);
-}
-
-.exp-dot-done {
-  background: var(--ok);
-}
-
-.exp-dot-skipped {
-  background: var(--text-dim);
-}
-
-.exp-dot-current {
-  background: var(--accent);
-  animation: exp-dot-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes exp-dot-pulse {
-  50% {
-    transform: scale(1.5);
-    box-shadow: 0 0 0 4px rgb(108 184 255 / 0.25);
-  }
-}
-
-.exp-registered {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin: 0 0 12px;
-  color: var(--ok);
-  font-size: 14px;
-  font-weight: 600;
-  animation: exp-registered 2.4s ease forwards;
-}
-
-@keyframes exp-registered {
-  0% {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  12%,
-  70% {
+/* «Reducir movimiento»: keep every cue visible, just still. */
+@media (prefers-reduced-motion: reduce) {
+  .exp-step-now::after {
+    animation: none !important;
     opacity: 1;
-    transform: none;
   }
-  100% {
-    opacity: 0.45;
+
+  .exp-dot-current {
+    animation: none !important;
+    transform: scale(1.4);
   }
-}
 
-.exp-enter {
-  margin-bottom: 12px;
-  animation: exp-enter 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-@keyframes exp-enter {
-  from {
-    opacity: 0;
-    transform: translateX(28px);
+  .exp-badge-dot {
+    animation: none !important;
   }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.exp-step {
-  border-width: 2px;
-}
-
-.exp-step-now {
-  border-color: var(--accent-strong);
-  animation: exp-glow 1.6s ease-in-out infinite;
-}
-
-@keyframes exp-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgb(61 156 255 / 0.55);
-  }
-  50% {
-    box-shadow: 0 0 0 7px rgb(61 156 255 / 0);
-  }
-}
-
-.exp-step-listening {
-  border-color: var(--border-strong);
-}
-
-.exp-step-title {
-  margin: 0;
-  font-size: 24px;
-  line-height: 1.2;
-  color: var(--text);
-}
-
-.exp-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.exp-badge-now {
-  background: var(--accent-strong);
-  color: var(--on-accent);
-}
-
-.exp-badge-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: exp-blink 1s steps(2, start) infinite;
-}
-
-@keyframes exp-blink {
-  to {
-    visibility: hidden;
-  }
-}
-
-.exp-badge-wait {
-  background: var(--surface-3);
-  color: var(--text-muted);
-}
-
-.exp-progress {
-  height: 8px;
-  border-radius: 4px;
-  background: var(--surface-3);
-  overflow: hidden;
-}
-
-.exp-progress span {
-  display: block;
-  height: 100%;
-  width: 100%;
-  background: var(--accent);
-  transform-origin: left;
-  animation: exp-fill linear forwards;
-}
-
-@keyframes exp-fill {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-.exp-done {
-  min-height: 56px;
-  font-size: 18px;
 }
