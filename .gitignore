@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# Material del fabricante: solo para consulta local, no se publica
+docs/fabricante/
+
+# Herramientas locales del editor
+.claude/
