@@ -292,8 +292,8 @@ export const CAR_EVENTS: readonly CarEventInfo[] = [
   {
     key: 'radar',
     name: 'Radar de aparcamiento',
-    // Seen on the user's F32 (2026-11-07): the strips blink in a colour that follows the distance with this on or off.
-    description: 'Vinculado a los sensores de aparcamiento. En tu F32 las tiras siguen al radar aunque esté desactivado.',
+    // Seen on the user's F32 (2026-11-07): works only while this is on.
+    description: 'Con marcha atrás, las tiras parpadean de verde a rojo según la distancia a lo que haya detrás.',
   },
   { key: 'speed', name: 'Velocidad', description: 'Vinculado a la velocidad del coche.' },
   { key: 'turn', name: 'Intermitentes', description: 'Vinculado a los intermitentes, con el color de «Intermitente».' },

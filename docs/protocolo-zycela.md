@@ -290,7 +290,7 @@ En la trama `26` la fuente de sonido vale `FF`. El mini-programa no trata ese va
 
 ### Observado al conducir (2026-11-07)
 
-- **Radar de aparcamiento:** con marcha atrás, las tiras parpadean en un color que va de verde a rojo según la distancia. Funciona con `[3201]` y con `[3200]`: el usuario lo activó y lo desactivó desde la app y el efecto siguió. El módulo informa `00` en esa posición de la trama `26`, y el mini-programa también la mostraría como "关闭" (desactivado), porque pinta `1` como "开启" y `0` como "关闭". Así que ese interruptor no apaga el efecto del radar, al menos en este firmware.
+- **Radar de aparcamiento:** con marcha atrás, las tiras parpadean en un color que va de verde a rojo según la distancia. Solo funciona con `[3201]`: con `[3200]` no hay efecto. Coincide con el mini-programa, que muestra `1` como "开启" (activado) y `0` como "关闭" (desactivado). En la copia del 6/11 estaba en `00`, y el usuario lo activó desde la app.
 - **Consola a mitad de brillo de noche (`[1A01]`):** funciona.
 - **Conclusión:** el módulo sí lee la red del coche, porque la distancia del radar y el estado de las luces solo pueden venir de ahí. El cable de protocolo y el código de coche `01000010` están bien. Lo que no funcione (bienvenida, puertas, intermitentes) es cuestión de esas funciones o de sus ajustes, no del cableado.
 

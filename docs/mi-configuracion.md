@@ -63,7 +63,7 @@ Leídos por la app (`ZYCL-FWD-41A0`, firmware 251121-023):
 | Bienvenida | activada, «4 puertas a la vez ③», color cian |
 | Aviso de puerta abierta | activado |
 | Aire acondicionado | activado |
-| Radar | desactivado, pero el efecto funciona igual: con marcha atrás las tiras parpadean de verde a rojo según la distancia, esté activado o no (comprobado el 7/11) |
+| Radar | desactivado. Al activarlo, con marcha atrás las tiras parpadean de verde a rojo según la distancia (comprobado el 7/11) |
 | Velocidad, intermitentes | desactivados (el coche los admite) |
 | Ángulo muerto | no admitido |
 
