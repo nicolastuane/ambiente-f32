@@ -135,6 +135,7 @@ function changedByTests(state: CarTestsState, runner: CarTestsRunner): { titles:
   for (const r of open) {
     r.touched.forEach((f) => labels.add(f === 'factory.dial' ? 'interruptor 8 (instalación)' : fieldLabel(f).toLowerCase()));
     if (r.unreadable.includes('turnColor')) labels.add('color del intermitente');
+    if (r.unreadable.includes('doorColor')) labels.add('color de puerta abierta');
   }
   return { titles: open.map((r) => runner.test(r.testId)?.title ?? r.testId), labels: [...labels] };
 }
@@ -257,6 +258,7 @@ function PendingCard({ state, runner, ready }: { state: CarTestsState; runner: C
     ...pending.fields.map(fieldLabel),
     ...pending.ifStill.map((x) => fieldLabel(x.field)),
     ...(pending.unreadable.includes('turnColor') ? ['Color del intermitente'] : []),
+    ...(pending.unreadable.includes('doorColor') ? ['Color de puerta abierta'] : []),
     ...(pending.dial ? ['Códigos de modelo (interruptor 8)'] : []),
     ...(pending.full ? ['Todos los ajustes'] : []),
   ];
@@ -625,7 +627,7 @@ function IntroCard({ state, runner, test, ready }: { state: CarTestsState; runne
 
 const OFFER_LABELS: Record<Offer, string> = {
   keepNightHalfOff: 'Dejar desactivada la «consola a mitad de brillo de noche»',
-  keepFeature8: 'Dejar el interruptor 8 encendido',
+  keepFeature8: 'Dejar el interruptor 8 encendido (los avisos vuelven a como estaban: actívalos luego en la pestaña Coche)',
   keepWelcome: 'Dejar la bienvenida en este modo, con tu color de siempre',
   keepWelcomeWhite: 'Dejar la bienvenida en este modo y en blanco',
 };
@@ -638,6 +640,9 @@ function DecideCard({ runner, test, record, busy }: { runner: CarTestsRunner; te
       // The two welcome options exclude each other.
       if (on && offer === 'keepWelcome') next = next.filter((o) => o !== 'keepWelcomeWhite');
       if (on && offer === 'keepWelcomeWhite') next = next.filter((o) => o !== 'keepWelcome');
+      // In the interruptor 8 test the welcome only appeared with the switch on: tick it too (it can be unticked).
+      const welcome = offer === 'keepWelcome' || offer === 'keepWelcomeWhite';
+      if (on && welcome && record.offers.includes('keepFeature8') && !next.includes('keepFeature8')) next = [...next, 'keepFeature8'];
       return next;
     });
   };
@@ -825,7 +830,7 @@ export function CarTests() {
       <PendingCard state={state} runner={runner} ready={ready} />
 
       {state.phase === 'idle' && (
-        <Card title="Pruebas del coche" icon="car" subtitle="Unos 15 minutos para averiguar qué lee el módulo del coche y por qué no sale la bienvenida.">
+        <Card title="Pruebas del coche" icon="car" subtitle="Unos 25 minutos para averiguar qué lee el módulo del coche y por qué no sale la bienvenida. Puedes saltarte cualquier prueba.">
           <p className="exp-before">
             <strong>Antes de empezar:</strong> en el coche (mejor en un garaje o al atardecer; si es un garaje, con la puerta abierta
             cuando arranques), conectado al módulo, con <strong>Ajustes › Pantalla y brillo › Bloqueo automático</strong> en «Nunca» y el

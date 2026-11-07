@@ -67,6 +67,7 @@ import type { LogEntry } from './lab';
 export type PrepareAction =
   | { kind: 'event'; key: CarEventKey; on: boolean }
   | { kind: 'turnColor'; index: number }
+  | { kind: 'doorColor'; index: number }
   | { kind: 'effect'; id: number }
   | { kind: 'nightHalf'; on: boolean }
   | { kind: 'controlMethod'; value: BinaryValue }
@@ -75,7 +76,7 @@ export type PrepareAction =
   | { kind: 'dialFeature8'; on: boolean };
 
 /** Values the module never reports: restored to their default, with a note. */
-export type UnreadableField = 'turnColor';
+export type UnreadableField = 'turnColor' | 'doorColor';
 
 /** An answer can offer to keep a change instead of restoring it (never the default). */
 export type Offer = 'keepNightHalfOff' | 'keepFeature8' | 'keepWelcome' | 'keepWelcomeWhite';
@@ -140,7 +141,141 @@ const KEEP_WELCOME: readonly Offer[] = ['keepWelcome', 'keepWelcomeWhite'];
 
 const GARAGE = 'Si estás en un garaje, abre su puerta antes de arrancar y apaga el motor en cuanto contestes.';
 
+/** Feature switch 8 on, plus every warning the car does not seem to read (and the radar, which it does). */
+const FEATURE8_PRESET: readonly PrepareAction[] = [
+  { kind: 'dialFeature8', on: true },
+  { kind: 'event', key: 'door', on: true },
+  // Blue: the default door colour (red) would not show on the user's red strips.
+  { kind: 'doorColor', index: 3 },
+  { kind: 'event', key: 'turn', on: true },
+  { kind: 'turnColor', index: 1 },
+  { kind: 'event', key: 'ac', on: true },
+  { kind: 'event', key: 'radar', on: true },
+];
+
+const KEEP_FEATURE8: readonly Offer[] = ['keepFeature8'];
+const KEEP_FEATURE8_AND_WELCOME: readonly Offer[] = ['keepFeature8', ...KEEP_WELCOME];
+
 export const CAR_TESTS: readonly CarTest[] = [
+  {
+    // First: the module reads the radar and the lights (seen 2026-11-07) but not doors, turn
+    // signals or A/C, and the vendor manuals for F30–F36 and G38 show this switch on.
+    id: 'feature8',
+    title: 'Interruptor de funciones nº 8',
+    why: 'Tu módulo lee el radar y las luces del coche, pero no las puertas, los intermitentes ni el aire, y la bienvenida no sale. En los manuales del fabricante para tu BMW el interruptor de funciones nº 8 sale encendido; en tu módulo está apagado. Puede ser lo que le falta.',
+    note: 'Unos 10 minutos. Empieza dentro del coche, con la puerta cerrada. La app pone el módulo un momento en modo de instalación, comprueba los códigos, enciende solo el interruptor 8, lo vuelve a leer y sale. Después activa los avisos de puerta, intermitentes, aire y radar. Al terminar lo deja todo como estaba, salvo que elijas dejar el interruptor 8 encendido. Al final hay que bloquear el coche: si el móvil se desconecta, al volver pulsa «Conectar» arriba.',
+    advanced: true,
+    needsFactory: true,
+    acknowledge: 'Entiendo que cambia la configuración de instalación; la app lo deja como estaba al terminar',
+    stages: [
+      {
+        id: 'a',
+        prepare: FEATURE8_PRESET,
+        instruction: 'Si no está puesto, pon el contacto (START sin pisar el freno). Abre la puerta del conductor, espera 5 segundos y ciérrala.',
+        observe: 'si las tiras se ponen azules o parpadean al abrir (el aviso de puerta está en azul para que se distinga).',
+        question: '¿Se pusieron azules o parpadearon las tiras al abrir?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Con el interruptor 8 el módulo lee las puertas.', offers: KEEP_FEATURE8 },
+          { id: 'no', label: 'No', conclusion: 'Con el interruptor 8 el aviso de puerta sigue sin verse.' },
+          { id: 'unsure', label: 'No estoy seguro' },
+        ],
+      },
+      {
+        id: 'b',
+        instruction: 'Pon el intermitente izquierdo unos segundos y quítalo. Luego enciende las luces de emergencia unos segundos y apágalas.',
+        observe: 'si alguna tira parpadea en amarillo.',
+        question: '¿Parpadeó alguna tira en amarillo?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Con el interruptor 8 el módulo lee los intermitentes.', offers: KEEP_FEATURE8 },
+          { id: 'no', label: 'No', conclusion: 'Con el interruptor 8 los intermitentes siguen sin verse en las tiras.' },
+          { id: 'unsure', label: 'No estoy seguro' },
+        ],
+      },
+      {
+        id: 'c',
+        instruction: 'Sube 2 o 3 grados la temperatura del climatizador y vuelve a bajarla. Luego pulsa dos veces el botón A/C.',
+        observe: 'si las tiras cambian de color un momento.',
+        question: '¿Cambiaron de color las tiras?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Con el interruptor 8 el módulo lee el climatizador.', offers: KEEP_FEATURE8 },
+          { id: 'no', label: 'No', conclusion: 'Con el interruptor 8 el aviso del aire sigue sin verse.' },
+          { id: 'unsure', label: 'No estoy seguro' },
+        ],
+      },
+      {
+        id: 'd',
+        // Never a person behind the car: only the brakes hold it.
+        instruction: `${GARAGE} Arranca (freno + START) y pon el freno de mano. Con el pie en el freno, mete la marcha atrás sin mover el coche. Detrás, a menos de un metro, tiene que haber una pared o un objeto (nunca una persona). Luego vuelve a P.`,
+        observe: 'las tiras de luz, no la pantalla del coche (la pantalla también se pone verde y roja).',
+        question: '¿Parpadean las tiras con la marcha atrás, como cuando probaste el radar?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Con el interruptor 8 el radar sigue funcionando.' },
+          {
+            id: 'no',
+            label: 'No',
+            conclusion: 'Con el interruptor 8 el radar dejó de verse en las tiras: tenlo en cuenta antes de dejarlo encendido.',
+          },
+          { id: 'unsure', label: 'No estoy seguro' },
+        ],
+      },
+      {
+        id: 'e',
+        prepare: WELCOME_PRESET,
+        countdownSec: 15,
+        instruction:
+          'Apaga el coche, baja, cierra la puerta y bloquea con el botón de la llave. Justo después pulsa «Empezar cuenta atrás». Cuando ponga «¡Ya!», desbloquea con el botón de la llave (sin tocar la manilla) y mira las tiras 10 segundos. Luego abre la puerta del conductor y mira otros 10 segundos.',
+        observe: 'luz blanca recorriendo alguna tira.',
+        question: '¿Viste luz blanca recorriendo alguna tira?',
+        answers: [
+          {
+            id: 'unlock',
+            label: 'Sí, al desbloquear',
+            next: 'end',
+            conclusion: 'Con el interruptor 8 aparece la bienvenida («envolvente consola»), al desbloquear.',
+            offers: KEEP_FEATURE8_AND_WELCOME,
+          },
+          {
+            id: 'door',
+            label: 'Sí, al abrir la puerta',
+            next: 'end',
+            conclusion: 'Con el interruptor 8 aparece la bienvenida («envolvente consola»), al abrir la puerta.',
+            offers: KEEP_FEATURE8_AND_WELCOME,
+          },
+          { id: 'no', label: 'No', next: 'f' },
+        ],
+      },
+      {
+        id: 'f',
+        prepare: [{ kind: 'welcome', mode: 1 }],
+        countdownSec: 15,
+        instruction:
+          'Cierra la puerta y bloquea con el botón de la llave. Justo después pulsa «Empezar cuenta atrás». Cuando ponga «¡Ya!», desbloquea con el botón de la llave y abre la puerta del conductor.',
+        observe: 'luz blanca recorriendo alguna tira.',
+        question: '¿Y ahora viste luz blanca recorriendo alguna tira?',
+        answers: [
+          {
+            id: 'yes',
+            label: 'Sí',
+            conclusion: 'Con el interruptor 8 aparece la bienvenida en el modo «envolvente puertas».',
+            offers: KEEP_FEATURE8_AND_WELCOME,
+          },
+          { id: 'no', label: 'No', conclusion: 'Con el interruptor 8 la bienvenida sigue sin aparecer con el módulo despierto.' },
+        ],
+      },
+    ],
+    conclusions: [
+      {
+        when: [
+          { test: 'feature8', stage: 'a', answers: ['no'] },
+          { test: 'feature8', stage: 'b', answers: ['no'] },
+          { test: 'feature8', stage: 'c', answers: ['no'] },
+          { test: 'feature8', stage: 'd', answers: ['yes'] },
+          { test: 'feature8', stage: 'f', answers: ['no'] },
+        ],
+        text: 'Con el interruptor 8 encendido no cambió nada: no hace falta dejarlo así.',
+      },
+    ],
+  },
   {
     id: 'radio',
     title: 'Botones de favoritos de la radio',
@@ -203,9 +338,10 @@ export const CAR_TESTS: readonly CarTest[] = [
           { kind: 'event', key: 'turn', on: true },
           { kind: 'turnColor', index: 1 },
         ],
-        instruction: 'Con el contacto puesto, enciende las luces de emergencia unos segundos y luego apágalas.',
-        observe: 'si las tiras parpadean en amarillo.',
-        question: '¿Parpadean las tiras en amarillo?',
+        instruction:
+          'Con el contacto puesto, pon el intermitente izquierdo unos segundos y quítalo. Luego enciende las luces de emergencia unos segundos y apágalas.',
+        observe: 'si alguna tira parpadea en amarillo.',
+        question: '¿Parpadeó alguna tira en amarillo?',
         answers: [
           { id: 'yes', label: 'Sí', conclusion: 'El módulo lee los intermitentes del coche.' },
           { id: 'no', label: 'No', conclusion: 'El módulo no reaccionó a los intermitentes.' },
@@ -221,10 +357,14 @@ export const CAR_TESTS: readonly CarTest[] = [
     stages: [
       {
         id: 'a',
-        prepare: [{ kind: 'event', key: 'door', on: true }],
+        prepare: [
+          { kind: 'event', key: 'door', on: true },
+          // Blue: the default door colour (red) would not show on the user's red strips.
+          { kind: 'doorColor', index: 3 },
+        ],
         instruction: 'Con el contacto puesto, abre la puerta del conductor, espera 5 segundos y ciérrala.',
-        observe: 'las tiras al abrir la puerta.',
-        question: '¿Cambiaron las luces al abrir (color o parpadeo)?',
+        observe: 'si las tiras se ponen azules o parpadean al abrir (el aviso de puerta está en azul para que se distinga).',
+        question: '¿Se pusieron azules o parpadearon las tiras al abrir?',
         answers: [
           { id: 'yes', label: 'Sí', conclusion: 'El módulo lee las puertas.' },
           { id: 'no', label: 'No', conclusion: 'El aviso de puerta no se vio.' },
@@ -344,7 +484,7 @@ export const CAR_TESTS: readonly CarTest[] = [
         id: 'b',
         countdownSec: 15,
         instruction:
-          'Sin desbloquear todavía, pulsa «Empezar cuenta atrás». Cuando ponga «¡Ya!», desbloquea y mira las tiras 10 segundos. Luego abre la puerta del conductor y mira otros 10 segundos.',
+          'Sin desbloquear todavía, pulsa «Empezar cuenta atrás». Cuando ponga «¡Ya!», desbloquea con el botón de la llave (sin tocar la manilla) y mira las tiras 10 segundos. Luego abre la puerta del conductor y mira otros 10 segundos.',
         observe: 'luz blanca recorriendo alguna tira.',
         question: '¿Viste luz blanca recorriendo alguna tira?',
         answers: [
@@ -370,7 +510,7 @@ export const CAR_TESTS: readonly CarTest[] = [
         prepare: [{ kind: 'welcome', mode: 1 }],
         countdownSec: 15,
         instruction:
-          'Cierra la puerta y bloquea. Justo después pulsa «Empezar cuenta atrás». Cuando ponga «¡Ya!», desbloquea y abre la puerta del conductor.',
+          'Cierra la puerta y bloquea con el botón de la llave. Justo después pulsa «Empezar cuenta atrás». Cuando ponga «¡Ya!», desbloquea con el botón de la llave y abre la puerta del conductor.',
         observe: 'luz blanca recorriendo alguna tira.',
         question: '¿Y ahora viste luz blanca recorriendo alguna tira?',
         answers: [
@@ -383,66 +523,8 @@ export const CAR_TESTS: readonly CarTest[] = [
           {
             id: 'no',
             label: 'No',
-            conclusion: 'Con el módulo despierto la bienvenida no aparece. Quedan el interruptor 8 y la prueba tras dormir el coche.',
+            conclusion: 'Con el módulo despierto la bienvenida no aparece. Queda la prueba tras dormir el coche.',
           },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'feature8',
-    title: 'Interruptor de funciones nº 8',
-    why: 'En los manuales del fabricante para tu BMW el interruptor 8 de «funciones» sale encendido; en tu módulo está apagado. No se sabe qué hace: puede que active la bienvenida.',
-    note: 'La app pone el módulo un momento en modo de instalación, comprueba los códigos actuales, enciende solo el interruptor 8, lo vuelve a leer y sale. Al terminar lo deja como estaba, salvo que elijas dejarlo encendido.',
-    advanced: true,
-    needsFactory: true,
-    offeredWhen: {
-      test: 'welcome',
-      stage: 'c',
-      answers: ['no'],
-      reason: 'Solo hace falta si en «Bienvenida (coche despierto)» no apareció nada.',
-    },
-    acknowledge: 'Entiendo que cambia la configuración de instalación; la app lo deja como estaba al terminar',
-    stages: [
-      {
-        id: 'a',
-        prepare: [{ kind: 'dialFeature8', on: true }, ...WELCOME_PRESET],
-        countdownSec: 15,
-        instruction:
-          'Apaga el coche, baja, cierra y bloquea. Justo después pulsa «Empezar cuenta atrás». Cuando ponga «¡Ya!», desbloquea y mira las tiras 10 segundos. Luego abre la puerta del conductor y mira otros 10 segundos.',
-        observe: 'luz blanca recorriendo alguna tira.',
-        question: '¿Viste luz blanca recorriendo alguna tira?',
-        answers: [
-          {
-            id: 'unlock',
-            label: 'Sí, al desbloquear',
-            conclusion: 'Con el interruptor 8 encendido aparece la bienvenida.',
-            offers: ['keepFeature8', ...KEEP_WELCOME],
-          },
-          {
-            id: 'door',
-            label: 'Sí, al abrir la puerta',
-            conclusion: 'Con el interruptor 8 encendido aparece la bienvenida.',
-            offers: ['keepFeature8', ...KEEP_WELCOME],
-          },
-          { id: 'no', label: 'No', conclusion: 'El interruptor 8 no cambia la bienvenida.' },
-        ],
-      },
-      {
-        id: 'b',
-        prepare: [{ kind: 'event', key: 'door', on: true }],
-        instruction: 'Sube al coche, cierra la puerta y pon el contacto (START sin pisar el freno). Luego abre la puerta del conductor y mira las tiras.',
-        observe: 'si las tiras avisan (color o parpadeo) al abrir.',
-        question: '¿Funciona el aviso de puerta?',
-        answers: [
-          { id: 'yes', label: 'Sí', conclusion: 'Con el interruptor 8 encendido el aviso de puerta sigue funcionando.' },
-          {
-            id: 'no',
-            label: 'No',
-            conclusion: 'Con el interruptor 8 encendido el aviso de puerta no funciona: se vuelve a apagar.',
-            withdraws: ['keepFeature8'],
-          },
-          { id: 'unsure', label: 'No estoy seguro', withdraws: ['keepFeature8'] },
         ],
       },
     ],
@@ -509,6 +591,10 @@ export function preparePlan(actions: readonly PrepareAction[], snapshot?: Snapsh
       case 'turnColor':
         plan.commands.push(cmd.turnColor(action.index));
         plan.unreadable = union(plan.unreadable, ['turnColor']);
+        break;
+      case 'doorColor':
+        plan.commands.push(cmd.doorColor(action.index));
+        plan.unreadable = union(plan.unreadable, ['doorColor']);
         break;
       case 'effect':
         plan.commands.push(cmd.effect(action.id));
@@ -587,10 +673,12 @@ export function applyActions(values: SnapshotValues, actions: readonly PrepareAc
 /** Default of each unreadable value (the vendor app's first option). */
 export const UNREADABLE_DEFAULTS: Readonly<Record<UnreadableField, () => string>> = {
   turnColor: () => cmd.turnColor(0),
+  doorColor: () => cmd.doorColor(0),
 };
 
 export const UNREADABLE_NOTES: Readonly<Record<UnreadableField, string>> = {
   turnColor: 'El color del intermitente no se puede leer del módulo: se ha dejado en rojo, el valor por defecto.',
+  doorColor: 'El color de puerta abierta no se puede leer del módulo: se ha dejado en rojo, el valor por defecto.',
 };
 
 /** What the user chose to keep instead of restoring (applied on top of the snapshot). */
@@ -1395,13 +1483,15 @@ export class CarTestsRunner {
         return;
       }
       const target = { carBits: car, featureBits: withFeatureSwitch(features, 8, plan.feature8) };
+      // An earlier attempt of this stage («Continuar la prueba») may already have changed the dial.
+      const dialBefore = this.state.get().records[test.id]?.dialChanged ?? false;
       this.updateRecord(test.id, (r) => ({ ...r, dialChanged: true }));
       let result: DialResult;
       try {
         result = await changeDialGuarded(this.c, target, { carBits: car }, this.timeouts().timeoutMs, LOCK_OWNER);
       } catch (error) {
-        // A guard refusal happens before [20…] is sent: there is nothing to put back.
-        if (error instanceof DialGuardError) this.updateRecord(test.id, (r) => ({ ...r, dialChanged: false }));
+        // A guard refusal happens before [20…] is sent: this attempt changed nothing.
+        if (error instanceof DialGuardError) this.updateRecord(test.id, (r) => ({ ...r, dialChanged: dialBefore }));
         if (run !== this.run) return;
         await this.abortTest(test, errorText(error));
         return;
@@ -1537,6 +1627,10 @@ export class CarTestsRunner {
     const conclusions = record.stages.map((st) => st.conclusion).filter((c): c is string => !!c);
     const withdrawn = new Set(record.stages.flatMap((st) => st.withdraws ?? []));
     const offers = [...new Set(record.stages.flatMap((st) => st.offers ?? []))].filter((o) => !withdrawn.has(o));
+    // Switch 8 kept on by an earlier run of this test: decide again (the default turns it off).
+    if (record.keptChanges.feature8 !== undefined && record.touched.includes('factory.dial') && !offers.includes('keepFeature8')) {
+      offers.unshift('keepFeature8');
+    }
     this.updateRecord(test.id, (r) => ({ ...r, conclusions: union(r.conclusions, conclusions), offers }));
     const s = this.state.get();
     const waiting = s.phase === 'finished' && s.waiting?.testId === test.id;
@@ -1629,7 +1723,10 @@ export class CarTestsRunner {
     const features = s.snapshot?.values.factory.featureBits;
     if (kept.includes('keepFeature8') && features) {
       changes.feature8 = true;
-      notes.push(`A petición tuya se deja encendido el interruptor de funciones nº 8 (${withFeatureSwitch(features, 8, true)}).`);
+      notes.push(
+        `A petición tuya se deja encendido el interruptor de funciones nº 8 (${withFeatureSwitch(features, 8, true)}). ` +
+          'Los avisos de puerta, intermitentes, aire y radar vuelven a como estaban: actívalos en la pestaña Coche si los quieres.',
+      );
     }
     if (kept.includes('keepWelcome') || kept.includes('keepWelcomeWhite')) {
       // The welcome settings in place when the answer that offered this was given.
@@ -1740,7 +1837,8 @@ export class CarTestsRunner {
       if (s.phase !== 'active' || !record || !this.test(testId)) return;
       if (Object.values(s.records).some((r) => r.status === 'running' || r.status === 'deciding')) return;
       if (record.status === 'running' || record.status === 'deciding' || record.status === 'waiting') return;
-      this.updateRecord(testId, (r) => ({ ...emptyRecord(testId), kept: r.kept, keptChanges: r.keptChanges }));
+      // dialChanged stays: a kept switch 8 must still be put back by «Restaurar todo ahora» and «Terminar».
+      this.updateRecord(testId, (r) => ({ ...emptyRecord(testId), kept: r.kept, keptChanges: r.keptChanges, dialChanged: r.dialChanged }));
       this.patch({ cursor: newCursor(testId, null, false) });
     });
   }
@@ -1754,6 +1852,8 @@ export class CarTestsRunner {
       const s = this.state.get();
       if ((s.phase !== 'active' && s.phase !== 'finished') || !s.snapshot) return;
       const interrupted: string[] = [];
+      // Before the kept changes are cleared: a kept switch 8 has to go back too.
+      const dial = Object.values(s.records).some((r) => r.dialChanged || r.keptChanges.feature8 !== undefined);
       for (const r of Object.values(s.records)) {
         if (r.status === 'running' || r.status === 'deciding' || r.status === 'waiting') {
           interrupted.push(r.testId);
@@ -1768,7 +1868,6 @@ export class CarTestsRunner {
           }));
         }
       }
-      const dial = Object.values(this.state.get().records).some((r) => r.dialChanged);
       this.patch({ waiting: null, target: cloneValues(s.snapshot.values) });
       await this.applyRestore({
         ...EMPTY_REQUEST,

@@ -148,7 +148,7 @@ La sección *Más › Instalación* equivale a la pantalla «工厂设置» del 
 
 ## Pruebas del coche
 
-*Más › Pruebas del coche* es un asistente para averiguar qué lee el módulo del coche: botones de la radio, tiras animadas, intermitentes, puertas, bajada de brillo al arrancar, menú del iDrive y bienvenida (con cuenta atrás). Antes de empezar guarda una copia; cada prueba cambia lo justo y, al terminarla, restaura y comprueba. Si se corta la conexión, la restauración queda pendiente y se aplica al volver a conectar. Mientras haya una sesión abierta, un aviso en todas las pestañas permite continuar o terminar y restaurar. «Copiar informe» deja el resultado listo para pegar en el chat.
+*Más › Pruebas del coche* es un asistente para averiguar qué lee el módulo del coche. Empieza por el interruptor de funciones nº 8 (avanzada, en modo fábrica, con lectura de comprobación): con él encendido comprueba puerta, intermitentes, aire, radar y bienvenida. Después vienen los botones de la radio, las tiras animadas, los intermitentes, las puertas, la bajada de brillo al arrancar, el menú del iDrive y la bienvenida (con cuenta atrás). Antes de empezar guarda una copia; cada prueba cambia lo justo y, al terminarla, restaura y comprueba. Si se corta la conexión, la restauración queda pendiente y se aplica al volver a conectar. Mientras haya una sesión abierta, un aviso en todas las pestañas permite continuar o terminar y restaurar. «Copiar informe» deja el resultado listo para pegar en el chat.
 
 ## Laboratorio
 

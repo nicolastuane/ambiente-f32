@@ -122,6 +122,13 @@ Las hipótesis, de más a menos probable:
   - el tuyo está en `00000000` (`mi-configuracion.md`).
 - [H] No se sabe qué hace ese interruptor.
 - **Prueba:** paso 7.
+- **Actualización 2026-11-07: ahora es el sospechoso principal.**
+  - El módulo lee el radar y las luces, pero no reaccionan ni el aviso de puerta, ni los intermitentes, ni el aire acondicionado (probados por el usuario).
+  - Todo lo que falla depende de señales de la carrocería y del climatizador. La bienvenida probablemente también, porque se dispara al desbloquear o al abrir.
+  - El climatizador está en la misma red K-CAN que el mando del iDrive, donde está conectado el kit. Así que no parece que la señal no llegue, sino que el módulo no la interpreta.
+  - Encaja con un interruptor de "variante" como el nº 8, que los manuales del fabricante traen encendido.
+  - En la app, «Pruebas del coche» empieza ahora por esta prueba, que comprueba puerta, intermitentes, aire, radar y bienvenida con el interruptor encendido.
+  - Si no cambia nada, el siguiente paso sería otro código de coche (H6).
 
 ### H4. El módulo no está leyendo la red en tu coche
 - Por ejemplo, el cable de protocolo está suelto o mal empalmado. Esto explicaría a la vez la bienvenida y cualquier otra función que no reaccione.

@@ -94,8 +94,9 @@ async function settle(runner: CarTestsRunner) {
 }
 
 describe('which tests are offered, and what can be kept', () => {
-  it('offers interruptor 8 only when the welcome did not appear (stage c «No»)', async () => {
+  it('interruptor 8 comes first and is offered in order; the welcome test no longer leads to it', async () => {
     const { runner } = await started();
+    expect(runner.state.get().cursor).toMatchObject({ testId: 'feature8', stageId: null });
     await goTo(runner, 'welcome');
     await runner.beginTest();
     await runner.answer('now');
@@ -104,10 +105,12 @@ describe('which tests are offered, and what can be kept', () => {
     runner.skipCountdown();
     await runner.answer('no');
     expect(record(runner, 'welcome').status).toBe('done');
-    expect(runner.state.get().cursor).toMatchObject({ testId: 'feature8', stageId: null });
+    expect(record(runner, 'welcome').conclusions).toContain('Con el módulo despierto la bienvenida no aparece. Queda la prueba tras dormir el coche.');
+    expect(record(runner, 'feature8').status).toBe('skipped');
+    expect(runner.state.get().cursor).toMatchObject({ testId: 'sleep', stageId: null });
   });
 
-  it('when the welcome works it is not offered; keeping the welcome keeps its mode and restores the door warning', async () => {
+  it('keeping the welcome keeps its mode and restores the door warning', async () => {
     const { adapter, runner } = await started();
     await goTo(runner, 'welcome');
     await runner.beginTest();
@@ -119,20 +122,22 @@ describe('which tests are offered, and what can be kept', () => {
     expect(runner.state.get().target).toMatchObject({ welcomeMode: 0, welcomeColor: 4, welcomeEnabled: true });
     expect(adapter.device.state).toMatchObject({ welcomeMode: 0, welcomeColor: 4, events: expect.objectContaining({ '31': 1 }) });
     expect(record(runner, 'welcome').restore?.ok).toBe(true);
-    expect(record(runner, 'feature8')).toMatchObject({ status: 'notOffered', notes: [expect.stringMatching(/no apareció nada/)] });
     expect(runner.state.get().cursor).toMatchObject({ testId: 'sleep' });
   });
 
-  it('a broken door warning withdraws «keep interruptor 8»', async () => {
+  it('a radar that stopped working is reported; keeping interruptor 8 stays a choice, never the default', async () => {
     const { adapter, runner } = await started();
-    await goTo(runner, 'sleep');
-    await runner.redoTest('feature8');
     await runner.beginTest({ acknowledged: true });
+    for (const id of ['yes', 'no', 'no', 'no']) await runner.answer(id); // door works, radar stopped
     runner.skipCountdown();
-    await runner.answer('unlock');
-    await runner.answer('no'); // the door warning stopped working
-    expect(record(runner, 'feature8')).toMatchObject({ status: 'deciding', offers: ['keepWelcome', 'keepWelcomeWhite'] });
-    await runner.decide(['keepFeature8']); // not on offer any more: ignored
+    await runner.answer('no');
+    runner.skipCountdown();
+    await runner.answer('no');
+    const r = record(runner, 'feature8');
+    expect(r).toMatchObject({ status: 'deciding', offers: ['keepFeature8'] });
+    expect(r.conclusions).toContain('Con el interruptor 8 el radar dejó de verse en las tiras: tenlo en cuenta antes de dejarlo encendido.');
+    expect(r.conclusions).not.toContain('Con el interruptor 8 encendido no cambió nada: no hace falta dejarlo así.');
+    await runner.decide([]); // «No, dejarlo como estaba»
     expect(adapter.device.state.featureBits).toBe('00000000');
     expect(record(runner, 'feature8').kept).toEqual([]);
   });
@@ -284,6 +289,7 @@ describe('evidence', () => {
     const original = dev.stateFrames.bind(adapter.device);
     let zone = false;
     dev.stateFrames = () => original().map((f) => (zone && f.startsWith('[4E') ? `${f.slice(0, 15)}FF2202${f.slice(21)}` : f));
+    await goTo(runner, 'radio');
     await runner.beginTest(); // radio
     zone = true; // favourite 5 changed something stored only there
     await runner.answer('no');
@@ -298,6 +304,7 @@ describe('evidence', () => {
     const { adapter, runner } = await started();
     const dev = adapter.device as unknown as { stateFrames: () => string[] };
     const original = dev.stateFrames.bind(adapter.device);
+    await goTo(runner, 'radio');
     await runner.beginTest();
     dev.stateFrames = () => original().filter((f) => !f.startsWith('[26'));
     await runner.answer('no');
@@ -422,9 +429,9 @@ describe('taps and debug', () => {
     const { runner } = await started({ minTapMs: 250 });
     await pause(300);
     await Promise.all([runner.skipTest(), runner.skipTest()]);
-    expect(record(runner, 'radio').status).toBe('skipped');
-    expect(record(runner, 'hcStrips').status).toBe('pending');
-    expect(runner.state.get().cursor).toMatchObject({ testId: 'hcStrips', stageId: null });
+    expect(record(runner, 'feature8').status).toBe('skipped');
+    expect(record(runner, 'radio').status).toBe('pending');
+    expect(runner.state.get().cursor).toMatchObject({ testId: 'radio', stageId: null });
   });
 
   it('a failed «Me equivoqué» leaves the stage to be prepared again, not shown as ready', async () => {

@@ -118,7 +118,7 @@ describe('CarTestsRunner session', () => {
     expect(received).toEqual(expect.arrayContaining(['[2101]', '[2100]', '[3702]']));
     expect(received.indexOf('[3702]')).toBeGreaterThan(received.indexOf('[2100]'));
     expect(adapter.listeningOnWriteChar).toBe(true);
-    expect(s.cursor).toMatchObject({ testId: 'radio', stageId: null });
+    expect(s.cursor).toMatchObject({ testId: 'feature8', stageId: null }); // the interruptor 8 test comes first
   });
 
   it('does not start without the state frames', async () => {
@@ -167,6 +167,7 @@ describe('CarTestsRunner session', () => {
 
   it('also restores values the car changed by itself (radio buttons)', async () => {
     const { adapter, runner } = await started();
+    await goTo(runner, 'radio');
     await runner.beginTest(); // radio: nothing to prepare
     adapter.device.state.color = '00ff00'; // as if favourite 5 had changed the colour
     await runner.answer('color');
@@ -251,7 +252,9 @@ describe('CarTestsRunner session', () => {
 
   it('ignores taps that come too soon (double taps)', async () => {
     const { runner } = await started({ minTapMs: 250 });
-    await runner.beginTest(); // right after «Empezar»: ignored
+    await new Promise((r) => setTimeout(r, 300));
+    await runner.skipTest(); // interruptor 8 → radio
+    await runner.beginTest(); // right after the new intro appeared: ignored
     expect(runner.state.get().cursor?.stageId).toBeNull();
     await new Promise((r) => setTimeout(r, 300));
     await runner.beginTest();
@@ -262,6 +265,7 @@ describe('CarTestsRunner session', () => {
 
   it('logs FFE1 and FFE2 notifications nobody asked for, without parsing FFE2', async () => {
     const { adapter, controller, runner } = await started();
+    await goTo(runner, 'radio');
     await runner.beginTest(); // radio, no preparation: nothing sent in this stage
     const color = controller.device.get().color;
     adapter.emitOnWriteChar('[4E00180100ff00FF11010904010300090800]');
@@ -283,50 +287,156 @@ describe('CarTestsRunner session', () => {
 describe('feature switch nº 8', () => {
   async function toFeature8() {
     const env = await started();
-    await goTo(env.runner, 'sleep'); // welcome skipped: feature 8 is not offered…
-    expect(record(env.runner, 'feature8').status).toBe('notOffered');
-    await env.runner.redoTest('feature8'); // …but can be run on demand
+    // First in the list, offered in order.
     expect(env.runner.state.get().cursor).toMatchObject({ testId: 'feature8', stageId: null });
     return env;
   }
 
-  it('needs the acknowledgement, then [2101] → 23 → [20…] → 23 → [2100], and reverts the same way', async () => {
+  /** Door, turn signals, A/C and radar, with these answers. */
+  async function answerWarnings(runner: CarTestsRunner, door: string, turn: string, ac: string, radar: string) {
+    for (const id of [door, turn, ac, radar]) await runner.answer(id);
+  }
+
+  it('needs the acknowledgement, then [2101] → 23 → [20…] → 23 → [2100] and the warnings on; reverts the same way', async () => {
     const { adapter, runner, received } = await toFeature8();
     await runner.beginTest();
     expect(runner.state.get().cursor?.stageId).toBeNull();
     let mark = received.length;
     await runner.beginTest({ acknowledged: true });
-    expect(since(received, mark)).toEqual(['[2101]', '[200100001000000001]', '[2100]', '[3001]', '[3900]', '[3809]', '[3100]']);
+    expect(since(received, mark)).toEqual(['[2101]', '[200100001000000001]', '[2100]', '[3101]', '[4603]', '[3401]', '[4501]', '[3501]', '[3201]']);
+    expect(adapter.device.state).toMatchObject({ doorColor: 3, turnColor: 1 });
     expect(adapter.device.state.featureBits).toBe('00000001');
+    expect(adapter.device.state.events).toMatchObject({ '31': 1, '32': 1, '34': 1, '35': 1 });
     expect(record(runner, 'feature8').notes.join(' ')).toMatch(/00000000 → 00000001/);
 
+    await answerWarnings(runner, 'yes', 'no', 'no', 'yes');
+    expect(runner.state.get().cursor).toMatchObject({ stageId: 'e', prepared: true });
+    expect(adapter.device.state).toMatchObject({ welcomeMode: 0, welcomeColor: 9, events: expect.objectContaining({ '31': 0 }) });
     await runner.answer('unlock'); // the countdown has not run: ignored
-    expect(runner.state.get().cursor).toMatchObject({ stageId: 'a' });
+    expect(runner.state.get().cursor).toMatchObject({ stageId: 'e' });
     runner.skipCountdown(); // «Ya lo he hecho»
     await runner.answer('unlock');
-    expect(runner.state.get().cursor).toMatchObject({ stageId: 'b', prepared: true });
-    await runner.answer('yes');
-    expect(record(runner, 'feature8')).toMatchObject({ status: 'deciding', offers: ['keepFeature8', 'keepWelcome', 'keepWelcomeWhite'] });
+    const r = record(runner, 'feature8');
+    expect(r).toMatchObject({ status: 'deciding', offers: ['keepFeature8', 'keepWelcome', 'keepWelcomeWhite'] });
+    expect(r.conclusions).toEqual(
+      expect.arrayContaining(['Con el interruptor 8 el módulo lee las puertas.', 'Con el interruptor 8 el radar sigue funcionando.']),
+    );
     mark = received.length;
     await runner.decide([]);
     const revert = since(received, mark).filter((c) => /^\[(20|21)/.test(c));
     expect(revert).toEqual(['[2101]', '[200100001000000000]', '[2100]']);
-    expect(adapter.device.state).toMatchObject({ featureBits: '00000000', factoryMode: false, welcomeMode: 5, welcomeColor: 4 });
+    const before = BUILTIN_SNAPSHOT.values.events;
+    expect(adapter.device.state).toMatchObject({
+      featureBits: '00000000',
+      factoryMode: false,
+      welcomeMode: 5,
+      welcomeColor: 4,
+      turnColor: 0,
+      doorColor: 0,
+      events: expect.objectContaining({ '31': before.door, '32': before.radar, '34': before.turn, '35': before.ac }),
+    });
     expect(record(runner, 'feature8').restore).toMatchObject({ ok: true });
+    expect(record(runner, 'feature8').restore?.notes.join(' ')).toMatch(/color de puerta abierta no se puede leer/);
+    expect(runner.state.get().cursor).toMatchObject({ testId: 'radio', stageId: null });
   });
 
-  it('«Dejar el interruptor 8 encendido» keeps it through «Terminar»', async () => {
+  it('«Dejar el interruptor 8 encendido» keeps it through «Terminar» and puts the warnings back', async () => {
     const { adapter, runner, received } = await toFeature8();
     await runner.beginTest({ acknowledged: true });
+    await answerWarnings(runner, 'no', 'yes', 'no', 'yes');
     runner.skipCountdown();
     await runner.answer('door');
-    await runner.answer('yes');
     const mark = received.length;
     await runner.decide(['keepFeature8']);
+    expect(record(runner, 'feature8').notes.join(' ')).toMatch(/actívalos en la pestaña Coche/);
     await runner.finish();
     expect(since(received, mark)).not.toContain('[200100001000000000]');
     expect(adapter.device.state.featureBits).toBe('00000001');
+    expect(adapter.device.state.events['34']).toBe(BUILTIN_SNAPSHOT.values.events.turn);
     expect(runner.state.get().target?.factory.featureBits).toBe('00000001');
+  });
+
+  it('nothing improved: no offer, the switch goes back by itself and the conclusion says so', async () => {
+    const { adapter, runner } = await toFeature8();
+    await runner.beginTest({ acknowledged: true });
+    await answerWarnings(runner, 'no', 'no', 'no', 'yes');
+    runner.skipCountdown();
+    await runner.answer('no'); // welcome, «envolvente consola»
+    expect(runner.state.get().cursor).toMatchObject({ stageId: 'f', prepared: true });
+    expect(adapter.device.state.welcomeMode).toBe(1);
+    runner.skipCountdown();
+    await runner.answer('no');
+    const r = record(runner, 'feature8');
+    expect(r).toMatchObject({ status: 'done', offers: [] });
+    expect(r.conclusions).toEqual(
+      expect.arrayContaining([
+        'Con el interruptor 8 el radar sigue funcionando.',
+        'Con el interruptor 8 encendido no cambió nada: no hace falta dejarlo así.',
+      ]),
+    );
+    expect(r.restore).toMatchObject({ ok: true });
+    expect(adapter.device.state).toMatchObject({ featureBits: '00000000', factoryMode: false, welcomeMode: 5 });
+  });
+
+  it('a switch kept on and then «Repetir»: asked again, and «Restaurar todo ahora» still turns it off', { timeout: 20000 }, async () => {
+    const { adapter, runner } = await toFeature8();
+    await runner.beginTest({ acknowledged: true });
+    await answerWarnings(runner, 'yes', 'no', 'no', 'yes');
+    runner.skipCountdown();
+    await runner.answer('no');
+    runner.skipCountdown();
+    await runner.answer('no');
+    await runner.decide(['keepFeature8']);
+    expect(adapter.device.state.featureBits).toBe('00000001');
+
+    // Repeated with no «Sí»: the earlier choice is asked again (default: turn it off).
+    await runner.redoTest('feature8');
+    await runner.beginTest({ acknowledged: true });
+    await answerWarnings(runner, 'no', 'no', 'no', 'yes');
+    runner.skipCountdown();
+    await runner.answer('no');
+    runner.skipCountdown();
+    await runner.answer('no');
+    expect(record(runner, 'feature8')).toMatchObject({ status: 'deciding', offers: ['keepFeature8'] });
+    await runner.decide(['keepFeature8']);
+    expect(adapter.device.state.featureBits).toBe('00000001');
+
+    // Repeated and skipped at the intro, then «Restaurar todo ahora».
+    await runner.redoTest('feature8');
+    await runner.skipTest();
+    await runner.restoreAll();
+    expect(runner.state.get().target?.factory.featureBits).toBe('00000000');
+    expect(adapter.device.state).toMatchObject({ featureBits: '00000000', factoryMode: false });
+  });
+
+  it('a guard refusal on «Continuar la prueba» keeps the dial change of the first attempt, so it is put back', async () => {
+    const { adapter, controller, runner } = await toFeature8();
+    // The first attempt changes the dial, then the link drops before the warnings go out.
+    const handle = adapter.device.handle.bind(adapter.device);
+    let dropAfterDial = true;
+    adapter.device.handle = (c: string) => {
+      const out = handle(c);
+      if (dropAfterDial && c === '[2100]' && adapter.device.state.featureBits === '00000001') {
+        dropAfterDial = false;
+        controller.setAutoReconnect(false);
+        adapter.simulateDrop(0);
+      }
+      return out;
+    };
+    await runner.beginTest({ acknowledged: true });
+    await waitFor(() => controller.session.status !== 'ready', 2000, 'link down');
+    expect(adapter.device.state.featureBits).toBe('00000001');
+    expect(record(runner, 'feature8').dialChanged).toBe(true);
+    await controller.connect();
+    await waitFor(() => controller.session.status === 'ready', 3000, 'ready');
+    // On the retry frame 23 never comes: the guard refuses.
+    adapter.device.handle = (c: string) => (c === '[2101]' ? undefined : handle(c));
+    await runner.retryPrepare();
+    adapter.device.handle = handle;
+    expect(record(runner, 'feature8').status).toBe('aborted');
+    expect(record(runner, 'feature8').dialChanged).toBe(true);
+    await runner.restoreAll();
+    expect(adapter.device.state).toMatchObject({ featureBits: '00000000', factoryMode: false });
   });
 
   it('aborts without touching the dial when the car bits differ from the snapshot', async () => {
@@ -337,7 +447,7 @@ describe('feature switch nº 8', () => {
     const sent = since(received, mark);
     expect(sent.some((c) => c.startsWith('[20'))).toBe(false);
     expect(sent.slice(0, 2)).toEqual(['[2101]', '[2100]']);
-    expect(sent).not.toContain('[3900]');
+    expect(sent).not.toContain('[3401]');
     const r = record(runner, 'feature8');
     expect(r.status).toBe('aborted');
     expect(r.dialChanged).toBe(false);
@@ -467,9 +577,10 @@ describe('report', () => {
     expect(text).toContain('Módulo: ZYCL-FWD-DEMO · firmware V3.1-DEMO · MODO DEMO');
     expect(text).toContain('Copia antes de las pruebas: 29 ajustes · instalación 01000010/00000000');
     expect(text).toContain('Igual que tu configuración guardada (6/11/2026).');
-    expect(text).toContain('1. Botones de favoritos de la radio: saltada');
-    expect(text).toContain('3. ¿Lee los intermitentes?: hecha');
-    expect(text).toContain('¿Parpadean las tiras en amarillo? → No');
+    expect(text).toContain('1. Interruptor de funciones nº 8: saltada');
+    expect(text).toContain('2. Botones de favoritos de la radio: saltada');
+    expect(text).toContain('4. ¿Lee los intermitentes?: hecha');
+    expect(text).toContain('¿Parpadeó alguna tira en amarillo? → No');
     expect(text).toContain('Preparado: [3401] [4501]');
     expect(text).toContain('Cambios de estado: Aviso: intermitentes desactivado → activado (lo puso la prueba)');
     expect(text).toContain('Restaurado: [3400] [4500] · comprobado');
