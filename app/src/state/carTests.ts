@@ -195,7 +195,7 @@ export const CAR_TESTS: readonly CarTest[] = [
   {
     id: 'turn',
     title: '¿Lee los intermitentes?',
-    why: 'Si el módulo lee la red del coche, puede hacer parpadear las tiras con los intermitentes.',
+    why: 'El módulo lee la red del coche (el radar funciona). Falta saber si también hace parpadear las tiras con los intermitentes.',
     stages: [
       {
         id: 'a',
@@ -238,7 +238,8 @@ export const CAR_TESTS: readonly CarTest[] = [
           { test: 'turn', stage: 'a', answers: ['no'] },
           { test: 'door', stage: 'a', answers: ['no'] },
         ],
-        text: 'El módulo no parece estar leyendo el coche. Revisa el cable de protocolo (CAN) en el conector de 4 pines del mando del iDrive.',
+        // The module does read the car bus: the parking-sensor effect and the night dimming work (seen 2026-11-07).
+        text: 'Ni las puertas ni los intermitentes cambian las tiras. El cable del coche está bien (el radar y la bajada de noche funcionan): son estos avisos los que no responden.',
       },
     ],
   },

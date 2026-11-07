@@ -74,6 +74,16 @@ Los coches modernos tienen una "red de datos interna" llamada **CAN**. Por ella 
 
 **Conclusión.** No es que el módulo no haga nada: es que no lo cuenta. Aun así, en tu coche todavía no hemos visto una prueba directa de que lea la red. El paso 2 del plan lo comprueba.
 
+> **Actualización 2026-11-07. [C] Confirmado en tu coche: el módulo lee la red.**
+> - **Radar:** con marcha atrás, las tiras parpadean de verde a rojo según la distancia. Pasa tanto con el aviso de radar activado (`[3201]`) como desactivado (`[3200]`).
+> - **Luz de noche:** la consola a mitad de brillo de noche funciona.
+>
+> Por tanto, el cableado y el código de coche están bien:
+> - de las sospechas de la sección 2 queda descartado que no lea la red;
+> - la hipótesis 1 de la sección 3 sobre la bajada de brillo gana fuerza.
+>
+> Ver `protocolo-zycela.md` §6.
+
 ---
 
 ## 2. Por qué puede no funcionar la bienvenida

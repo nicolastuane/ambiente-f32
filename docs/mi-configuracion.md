@@ -58,12 +58,13 @@ Leídos por la app (`ZYCL-FWD-41A0`, firmware 251121-023):
 |---|---|
 | Color | `#FF1000` fijo |
 | Brillo | global 9, contorno 9, pies 4 (zonas arriba/abajo) |
-| Consola a mitad de brillo de noche | **activada** (probablemente es lo que baja la luz al arrancar con las luces encendidas) |
+| Consola a mitad de brillo de noche | **activada**, y comprobado el 7/11 que funciona. Probablemente es lo que baja la luz al arrancar con las luces encendidas. |
 | Control | coche + móvil |
 | Bienvenida | activada, «4 puertas a la vez ③», color cian |
 | Aviso de puerta abierta | activado |
 | Aire acondicionado | activado |
-| Radar, velocidad, intermitentes | desactivados (el coche los admite) |
+| Radar | desactivado, pero el efecto funciona igual: con marcha atrás las tiras parpadean de verde a rojo según la distancia, esté activado o no (comprobado el 7/11) |
+| Velocidad, intermitentes | desactivados (el coche los admite) |
 | Ángulo muerto | no admitido |
 
 ## Antes de enviar comandos

@@ -209,7 +209,7 @@ describe('CarTestsRunner session', () => {
     await runner.beginTest(); // door
     await runner.answer('no');
     expect(record(runner, 'door').conclusions).toContain(
-      'El módulo no parece estar leyendo el coche. Revisa el cable de protocolo (CAN) en el conector de 4 pines del mando del iDrive.',
+      'Ni las puertas ni los intermitentes cambian las tiras. El cable del coche está bien (el radar y la bajada de noche funcionan): son estos avisos los que no responden.',
     );
   });
 
