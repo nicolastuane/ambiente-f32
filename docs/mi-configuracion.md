@@ -5,8 +5,8 @@ Copia de la pantalla "工厂设置" (ajustes de fábrica) del mini-programa, tom
 | Ajuste (chino) | Qué es | Valor | Comando |
 |---|---|---|---|
 | 车型编码 | Código de modelo de coche (8 interruptores) | 2 y 7 encendidos → `01000010` | — |
-| 功能拨码 | Interruptores de funciones extra | todos apagados → `00000000` | — |
-| 确定 | Enviar ambos códigos | — | `[200100001000000000]` |
+| 功能拨码 | Interruptores de funciones extra | todos apagados → `00000000`. **Desde el 7/11/2026 el nº 8 está encendido → `00000001`** (lo eligió el usuario en «Pruebas del coche»; con él funciona el aviso del climatizador) | — |
+| 确定 | Enviar ambos códigos | — | `[200100001000000001]` (con el interruptor 8 encendido, como está ahora; `[200100001000000000]` era el valor original) |
 | 主驾 | Tira del lado del conductor: nº de LEDs | 50 | `[1C0050]` |
 | 主驾 · 左边出线 | Conductor: el cable sale por la izquierda | izquierda | `[2C00]` |
 | 副驾 | Tira del lado del acompañante: nº de LEDs | 50 | `[0F0050]` |

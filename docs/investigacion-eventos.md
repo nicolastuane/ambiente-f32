@@ -421,9 +421,9 @@ Esto **ya es un cambio automático ligado al motor**, aunque solo de brillo, no 
     - vendor default feature dial `00000001`;
     - favourite-button control (4 = mode, 5/6 = colour, 7/8 = brightness; 1+N variants).
 
-**Files:** the only scratch file I created is `C:/Users/ntuane/AppData/Local/Temp/zysyn/ae_dial_crop.png`, a crop of the vendor G38 manual showing the feature dial with switch 8 ON. Key sources:
-- `C:/Users/ntuane/AppData/Local/Temp/zyres/ae_2.jpg`
-- `C:/Users/ntuane/AppData/Local/Temp/zyres/ae_4.jpg`
-- `C:/Users/ntuane/AppData/Local/Temp/zyres/amz_p7_crop.png`
-- `C:/Users/ntuane/AppData/Local/Temp/bmwres/pdf/gve_p8.png` (F30 bus overview, document page 4)
-- `C:/Users/ntuane/AppData/Local/Temp/wxre/pretty/app-service.js`
+**Files:** the only scratch file I created is `C:/Users/.../AppData/Local/Temp/zysyn/ae_dial_crop.png`, a crop of the vendor G38 manual showing the feature dial with switch 8 ON. Key sources:
+- `C:/Users/.../AppData/Local/Temp/zyres/ae_2.jpg`
+- `C:/Users/.../AppData/Local/Temp/zyres/ae_4.jpg`
+- `C:/Users/.../AppData/Local/Temp/zyres/amz_p7_crop.png`
+- `C:/Users/.../AppData/Local/Temp/bmwres/pdf/gve_p8.png` (F30 bus overview, document page 4)
+- `C:/Users/.../AppData/Local/Temp/wxre/pretty/app-service.js`

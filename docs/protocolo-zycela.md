@@ -292,7 +292,35 @@ En la trama `26` la fuente de sonido vale `FF`. El mini-programa no trata ese va
 
 - **Radar de aparcamiento:** con marcha atrás, las tiras parpadean en un color que va de verde a rojo según la distancia. Solo funciona con `[3201]`: con `[3200]` no hay efecto. Coincide con el mini-programa, que muestra `1` como "开启" (activado) y `0` como "关闭" (desactivado). En la copia del 6/11 estaba en `00`, y el usuario lo activó desde la app.
 - **Consola a mitad de brillo de noche (`[1A01]`):** funciona.
-- **Conclusión:** el módulo sí lee la red del coche, porque la distancia del radar y el estado de las luces solo pueden venir de ahí. El cable de protocolo y el código de coche `01000010` están bien. Lo que no funcione (bienvenida, puertas, intermitentes) es cuestión de esas funciones o de sus ajustes, no del cableado.
+- **Conclusión:** el módulo sí lee la red del coche, porque la distancia del radar y el estado de las luces solo pueden venir de ahí.
+
+### Pruebas guiadas de la app (7–9/11/2026)
+
+Informe completo pegado por el usuario. Copia de partida (7/11):
+- tramas `[4E001801FF0D00FF0D000904010300090800]`, `[2601010000010101000104FF00FF]`, `[250055AA0123FF000000]` y `[4F0055AA0050000050000050010050010101]`;
+- respecto al 6/11 cambiaron el color (`#ff0d00`), el aviso de intermitentes (ahora activado) y el modo de bienvenida (1, «envolvente puertas»).
+
+**Funciona:**
+
+| Prueba | Resultado |
+|---|---|
+| Interruptor de funciones nº 8 | Se encendió (`[200100001000000001]` dentro de `[2101]`…`[2100]`, leído de nuevo, correcto). El usuario lo **dejó encendido**: el módulo queda en `01000010/00000001`. |
+| Climatizador (`[3501]`) | Las tiras cambian de color al cambiar la temperatura. El día anterior, con el interruptor 8 apagado, el usuario no lo vio funcionar: quizá el interruptor 8 activa esta señal (**no confirmado**). |
+| Radar (`[3201]`) | Funciona. |
+| Botones de favoritos de la radio | Cambian el color del kit: color `#ff0d00` → `#ff0000` y brillo 3 de 4 a 9. Las posiciones 15–20 de la trama `4E` cambiaron a la vez, de `FF0D00` a `FF0000` (probablemente el color de la zona 2). |
+| Menú de luz ambiente del iDrive | Existe, y el módulo lo sigue: al cambiarlo, los tres brillos pasaron de 9/9/4 a 6/6/6. El menú solo tiene brillo, sin colores (comprobado por el usuario). |
+| Bloqueo | Las tiras se apagan nada más bloquear. |
+
+**No funciona** (todo con el interruptor 8 encendido):
+
+| Prueba | Resultado |
+|---|---|
+| Aviso de puerta (`[3101]` y color azul `[4603]`) | Nada. |
+| Intermitentes y luces de emergencia (`[3401]` y amarillo `[4501]`) | Nada. |
+| Bienvenida, modo 0 en blanco y modo 1 | No aparece. |
+| Efecto «Flujo» (`[1E03]`) | **No se mueve nada**: no hay tiras animadas (HC / 幻彩) visibles. |
+
+Ninguna notificación no pedida en ningún paso, ni por FFE1 ni por FFE2. Se saltaron la prueba de la bajada de brillo al arrancar y la de la bienvenida tras dormir el coche. El cable de protocolo y el código de coche `01000010` están bien. Lo que no funcione (bienvenida, puertas, intermitentes) es cuestión de esas funciones o de sus ajustes, no del cableado.
 
 ## 7. Otras vías de control (documentación del fabricante)
 
