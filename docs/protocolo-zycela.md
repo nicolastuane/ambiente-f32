@@ -12,6 +12,21 @@ Reconstruido a partir del mini-programa de WeChat 氛围灯控制程序 (appid `
 | Característica de notificación | `0000ffe1-0000-1000-8000-00805f9b34fb` (propiedad `notify`) |
 | MTU | En Android el mini-programa pide MTU 120. En iOS el sistema la negocia solo |
 
+### Lo que anuncia y expone el módulo (nRF Connect, 2026-11-10)
+
+Visto por el usuario en su módulo `ZYCL-FWD-41A0`:
+
+- **Anuncio:**
+  - servicios `AF30`, `FFF0` y `FEE7`;
+  - datos de fabricante con el código de empresa `0x0103` (que nRF Connect atribuye a Bang & Olufsen) y `FFFF FFFF FFFF 6600 0108 00`.
+- **Al conectar** solo expone `1800` (Generic Access), `1801` (Generic Attribute) y `FFE0`. Dentro de `FFE0` están `FFE1` y `FFE2`, las dos con write, write without response y notify, y cada una con su descriptor `2902`.
+- **No hay ningún servicio de actualización de firmware:** ni el DFU de Nordic, ni SMP, ni otro OTA. El aviso de nRF Connect «DFU: Connection is required for DFU» es genérico: lo muestra antes de conectar con cualquier aparato.
+- **Conclusión:** por Bluetooth no se puede cambiar el programa del módulo. Solo se le pueden enviar las órdenes de la sección 3.
+- **Interpretación (no confirmada):**
+  - Los servicios anunciados no existen al conectar: el chip los anuncia, pero no los implementa.
+  - `FEE7` es el identificador que el Bluetooth SIG asignó a Tencent, y se usa para que WeChat encuentre el aparato.
+  - El código de empresa `0x0103` probablemente es un valor de relleno del fabricante del chip, no un producto de Bang & Olufsen.
+
 Secuencia al conectar:
 1. Conectar el GATT y descubrir el servicio `ffe0`.
 2. Activar las notificaciones en `ffe1`.
