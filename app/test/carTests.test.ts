@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MockAdapter } from '../src/ble/mockAdapter';
 import { BUILTIN_SNAPSHOT } from '../src/protocol/zycela/snapshot';
 import { BackupStore } from '../src/state/backup';
-import { CAR_TESTS, CarTestsRunner, carTestsReport, preparePlan } from '../src/state/carTests';
+import { CAR_TESTS, CAR_TESTS_ROUND1, CarTestsRunner, carTestsReport, preparePlan } from '../src/state/carTests';
 import type { CarTestsDeps, CarTestsState } from '../src/state/carTests';
 import { AppController } from '../src/state/controller';
 import type { KeyValueStorage } from '../src/state/storage';
@@ -56,6 +56,8 @@ function newRunner(controller: AppController, extra: Partial<CarTestsDeps> = {})
     timeoutMs: 400,
     quietMs: 15,
     minTapMs: 0,
+    // These tests cover the first round; the second has its own file.
+    tests: CAR_TESTS_ROUND1,
     ...extra,
   });
   runners.push(runner);
@@ -192,7 +194,7 @@ describe('CarTestsRunner session', () => {
     await runner.finish();
     expect(since(received, mark)).not.toContain('[1A01]');
     expect(adapter.device.state.nightHalf).toBe(0);
-    expect(carTestsReport(runner.state.get())).toContain('[1A00]');
+    expect(carTestsReport(runner.state.get(), CAR_TESTS_ROUND1)).toContain('[1A00]');
   });
 
   it('sets the unreadable turn colour back to its default, with a note', async () => {
@@ -278,7 +280,7 @@ describe('CarTestsRunner session', () => {
       expect.objectContaining({ char: 'FFE2', text: '[4E00180100ff00FF11010904010300090800]' }),
       expect.objectContaining({ char: 'FFE1', text: '[99AB]' }),
     ]);
-    const report = carTestsReport(runner.state.get());
+    const report = carTestsReport(runner.state.get(), CAR_TESTS_ROUND1);
     expect(report).toContain('Notificaciones no pedidas: 2');
     expect(report).toMatch(/FFE2 \d\d:\d\d:\d\d\.\d{3} \[4E00180100ff00/);
   });
@@ -572,7 +574,7 @@ describe('report', () => {
     await runner.beginTest();
     await runner.answer('no');
     await runner.finish();
-    const text = carTestsReport(runner.state.get());
+    const text = carTestsReport(runner.state.get(), CAR_TESTS_ROUND1);
     expect(text).toMatch(/^Pruebas del coche · Ambiente F32 · /);
     expect(text).toContain('Módulo: ZYCL-FWD-DEMO · firmware V3.1-DEMO · MODO DEMO');
     expect(text).toContain('Copia antes de las pruebas: 29 ajustes · instalación 01000010/00000000');

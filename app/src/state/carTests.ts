@@ -68,6 +68,13 @@ export type PrepareAction =
   | { kind: 'event'; key: CarEventKey; on: boolean }
   | { kind: 'turnColor'; index: number }
   | { kind: 'doorColor'; index: number }
+  /** [07]: 1 on, 2 follow the car's lights. The module never reports it. */
+  | { kind: 'power'; mode: cmd.PowerMode }
+  /** [14]: 0 upper/lower, 1 front/rear. The brightness values are sent again after it. */
+  | { kind: 'zoning'; value: BinaryValue }
+  /** [06]/[10]/[09]: whole car or one zone. */
+  | { kind: 'color'; zone: cmd.ColorZone; hex: string }
+  | { kind: 'rgbMode'; mode: number }
   | { kind: 'effect'; id: number }
   | { kind: 'nightHalf'; on: boolean }
   | { kind: 'controlMethod'; value: BinaryValue }
@@ -76,10 +83,20 @@ export type PrepareAction =
   | { kind: 'dialFeature8'; on: boolean };
 
 /** Values the module never reports: restored to their default, with a note. */
-export type UnreadableField = 'turnColor' | 'doorColor';
+export type UnreadableField = 'turnColor' | 'doorColor' | 'power';
 
 /** An answer can offer to keep a change instead of restoring it (never the default). */
-export type Offer = 'keepNightHalfOff' | 'keepFeature8' | 'keepWelcome' | 'keepWelcomeWhite';
+export type Offer =
+  | 'keepNightHalfOff'
+  | 'keepFeature8'
+  | 'keepWelcome'
+  | 'keepWelcomeWhite'
+  | 'keepFollowLights'
+  | 'keepFrontRearZones'
+  | 'keepSpeedOn'
+  | 'keepRadarOn'
+  | 'keepDoorWarning'
+  | 'keepTurnWarning';
 
 export interface Answer {
   id: string;
@@ -126,6 +143,8 @@ export interface CarTest {
   acknowledge?: string;
   /** Only offered in the normal order after this answer (otherwise on demand, from the results). */
   offeredWhen?: { test: string; stage: string; answers: readonly string[]; reason: string };
+  /** Never offered in the normal order (an earlier round): the reason, shown in the results, where it can be run on demand. */
+  archived?: string;
   /** Deferred tests: what stays changed while the test waits for its answer, in plain words. */
   waitingNote?: string;
   stages: readonly Stage[];
@@ -156,7 +175,8 @@ const FEATURE8_PRESET: readonly PrepareAction[] = [
 const KEEP_FEATURE8: readonly Offer[] = ['keepFeature8'];
 const KEEP_FEATURE8_AND_WELCOME: readonly Offer[] = ['keepFeature8', ...KEEP_WELCOME];
 
-export const CAR_TESTS: readonly CarTest[] = [
+/** The first round (7–9/11/2026): interruptor 8, radio, strips, turn, door, dimming, iDrive, welcome. */
+export const CAR_TESTS_ROUND1: readonly CarTest[] = [
   {
     // First: the module reads the radar and the lights (seen 2026-11-07) but not doors, turn
     // signals or A/C, and the vendor manuals for F30–F36 and G38 show this switch on.
@@ -558,6 +578,427 @@ export const CAR_TESTS: readonly CarTest[] = [
   },
 ];
 
+
+const KEEP_RADAR: readonly Offer[] = ['keepRadarOn'];
+
+const SAME_AS_BEFORE = 'Otra vez el 5, igual que antes.';
+const radioPress = (id: string, next5: string | undefined): Stage => ({
+  id,
+  instruction: SAME_AS_BEFORE,
+  observe: 'el color de las tiras.',
+  question: '¿Qué color salió?',
+  answers: [
+    { id: 'new', label: 'Uno nuevo', ...(next5 ? { next: next5 } : {}) },
+    { id: 'seen', label: 'Uno que ya salió', next: 'k6' },
+    { id: 'same', label: 'No cambió', next: 'k6' },
+  ],
+});
+
+/**
+ * Second round (from 2026-11-09): what the module can do without the phone,
+ * after the first round showed a solid-colour kit (no movement with «Flujo»)
+ * that reads the radar, the climate control, the radio keys and the iDrive
+ * brightness but shows no door, turn or welcome effect. See docs/opciones-sin-movil.md.
+ * Day tests first, then driving, then night; «seguir las luces» last, because
+ * keeping it leaves the strips off by day for the rest of the session.
+ */
+export const CAR_TESTS_ROUND2: readonly CarTest[] = [
+  {
+    id: 'kitType',
+    title: '¿Tiras de color fijo o animadas?',
+    why: 'Con «Flujo» no se movió nada. Si tu kit es de color fijo, la bienvenida y los efectos animados no pueden verse nunca. Esta prueba lo confirma y, de paso, muestra qué tiras son de cada zona.',
+    stages: [
+      {
+        id: 'a',
+        prepare: [
+          { kind: 'color', zone: 1, hex: '#ff00ff' },
+          { kind: 'color', zone: 2, hex: '#ffffff' },
+        ],
+        instruction: 'Pon el contacto (START sin pisar el freno) y mira todas las tiras: salpicadero, puertas, pies y portaobjetos.',
+        observe: 'qué tiras salen moradas y cuáles blancas.',
+        question: '¿Cómo se repartieron los colores?',
+        answers: [
+          {
+            id: 'vendor',
+            label: 'Salpicadero y puertas moradas; pies y portaobjetos blancos',
+            conclusion: 'Las zonas son las del fabricante: zona 1 = salpicadero, tiradores y contornos; zona 2 = pies y portaobjetos. Puedes tener dos colores a la vez.',
+          },
+          { id: 'other', label: 'Otro reparto', conclusion: 'Las zonas no son las del manual del fabricante.' },
+          { id: 'same', label: 'Todas del mismo color', conclusion: 'Tu instalación no separa zonas: todas las tiras van juntas.' },
+        ],
+      },
+      {
+        id: 'b',
+        // All white first: any second colour or movement then comes from the effect.
+        prepare: [
+          { kind: 'color', zone: 0, hex: '#ffffff' },
+          { kind: 'effect', id: 0 },
+        ],
+        instruction: 'Mira las tiras durante 10 segundos.',
+        observe: 'si alguna tira deja de ser blanca: varios colores a la vez o luz que se mueve.',
+        question: '¿Alguna tira tiene ahora varios colores o luz que se mueve?',
+        answers: [
+          {
+            id: 'no',
+            label: 'No, todas siguen blancas',
+            conclusion:
+              'Tu kit es de color fijo, sin tiras animadas: la bienvenida y los efectos animados no pueden verse. Para tenerlos habría que poner las tiras animadas («幻彩») del mismo fabricante, que van en esta misma caja.',
+          },
+          { id: 'yes', label: 'Sí, colores o movimiento', conclusion: 'Hay tiras animadas: la bienvenida debería poder verse en ellas.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'acLook',
+    title: 'Qué hace el climatizador en las tiras',
+    why: 'Ya viste que el climatizador cambia el color. Si el color se queda puesto, la rueda de temperatura serviría para elegir color sin el móvil.',
+    note: 'Al terminar, vuelve a poner tu temperatura de siempre.',
+    stages: [
+      {
+        id: 'a',
+        // White, so a red or orange reaction shows (the user's colour is red).
+        prepare: [
+          { kind: 'color', zone: 0, hex: '#ffffff' },
+          { kind: 'event', key: 'ac', on: true },
+        ],
+        instruction: 'Con el contacto puesto, sube 2 grados la temperatura y espera 15 segundos sin tocar nada.',
+        observe: 'de qué color se ponen las tiras (ahora están en blanco para que se note) y cuánto dura.',
+        question: '¿Qué hicieron las tiras al subir?',
+        answers: [
+          { id: 'flash', label: 'Cambiaron un momento y volvieron', conclusion: 'Al subir, el climatizador solo da un aviso corto.' },
+          { id: 'stay', label: 'Cambiaron y se quedaron así', conclusion: 'Al subir, el color se queda.' },
+          { id: 'none', label: 'Nada' },
+        ],
+      },
+      {
+        id: 'b',
+        instruction: 'Ahora baja 4 grados y espera 15 segundos.',
+        observe: 'de qué color se ponen las tiras y cuánto dura.',
+        question: '¿Y al bajar?',
+        answers: [
+          { id: 'flash', label: 'Cambiaron un momento y volvieron', conclusion: 'Al bajar, también es solo un aviso corto: no sirve para elegir color.' },
+          { id: 'stay', label: 'Cambiaron y se quedaron así', conclusion: 'Al bajar, el color se queda: la temperatura cambia el color del kit.' },
+          { id: 'none', label: 'Nada' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'radioMap',
+    title: 'Botones de la radio: qué colores recorren',
+    why: 'Los botones de favoritos cambian el color sin el móvil. Para usarlos como escenas (por ejemplo, dos toques al arrancar) hay que saber qué colores recorren y en qué orden. La app apunta el color después de cada toque.',
+    note: 'Si en un botón tienes guardado un teléfono, apretarlo lo llamaría: tócalo sin apretar.',
+    stages: [
+      {
+        id: 'a',
+        instruction: 'Con el contacto puesto, toca el botón de favoritos 5 sin apretarlo (solo apoya el dedo).',
+        observe: 'el color de las tiras.',
+        question: '¿Cambió el color?',
+        answers: [
+          { id: 'yes', label: 'Sí', next: 'p2', conclusion: 'Basta con tocar el botón, sin apretarlo.' },
+          { id: 'no', label: 'No' },
+        ],
+      },
+      {
+        id: 'a2',
+        instruction: 'Ahora aprieta el 5 una vez. Si cambia de emisora, es normal.',
+        observe: 'el color de las tiras.',
+        question: '¿Cambió el color?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Hay que apretar el botón (tocarlo no basta).' },
+          { id: 'no', label: 'No', next: 'k4', conclusion: 'El botón 5 no cambia el color.' },
+        ],
+      },
+      radioPress('p2', undefined),
+      radioPress('p3', undefined),
+      radioPress('p4', undefined),
+      radioPress('p5', undefined),
+      radioPress('p6', 'k6'),
+      {
+        id: 'k6',
+        instruction: 'Ahora el 6 una vez, igual que el 5.',
+        observe: 'el color de las tiras.',
+        question: '¿Volvió al color anterior?',
+        answers: [
+          { id: 'back', label: 'Sí, al anterior' },
+          { id: 'other', label: 'Cambió a otro' },
+          { id: 'same', label: 'No cambió' },
+        ],
+      },
+      {
+        id: 'k4',
+        instruction: 'Ahora el 4 una vez.',
+        observe: 'si cambia el modo (por ejemplo, empieza a cambiar de color solo o a respirar).',
+        question: '¿Qué pasó con el 4?',
+        answers: [
+          { id: 'mode', label: 'Cambió el modo' },
+          { id: 'color', label: 'Cambió el color' },
+          { id: 'none', label: 'Nada' },
+        ],
+      },
+      {
+        id: 'k7',
+        instruction: 'Ahora el 7 una vez.',
+        observe: 'el brillo de las tiras.',
+        question: '¿Qué hizo el brillo?',
+        answers: [
+          { id: 'up', label: 'Subió' },
+          { id: 'down', label: 'Bajó' },
+          { id: 'none', label: 'Nada' },
+        ],
+      },
+      {
+        id: 'k8',
+        instruction: 'Ahora el 8 una vez.',
+        observe: 'el brillo de las tiras.',
+        question: '¿Qué hizo el brillo?',
+        answers: [
+          { id: 'up', label: 'Subió' },
+          { id: 'down', label: 'Bajó' },
+          { id: 'none', label: 'Nada' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'pdc',
+    title: 'Radar sin marcha atrás (botón PDC)',
+    why: 'El radar ya funciona en marcha atrás. Si tu coche tiene botón PDC (sensores de aparcamiento) junto a la palanca, al pulsarlo se encienden los sensores sin meter la marcha atrás: quizá las tiras muestren también los colores del radar.',
+    stages: [
+      {
+        id: 'a',
+        prepare: [{ kind: 'event', key: 'radar', on: true }],
+        instruction: `${GARAGE} Arranca y pon el freno de mano, en P. Con una pared o un objeto a menos de un metro, delante o detrás (nunca una persona), pulsa el botón PDC (el del coche con ondas, junto a la palanca).`,
+        observe: 'las tiras de luz, no la pantalla del coche.',
+        question: '¿Cambiaron las tiras de color al pulsar el PDC?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Con el botón PDC las tiras muestran el radar sin marcha atrás.', offers: KEEP_RADAR },
+          { id: 'no', label: 'No', conclusion: 'El radar solo sale con la marcha atrás.', offers: KEEP_RADAR },
+          { id: 'noButton', label: 'No tengo ese botón', offers: KEEP_RADAR },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'speed',
+    title: 'Aviso de velocidad (conduciendo, con acompañante)',
+    why: 'El módulo tiene un «aviso de exceso de velocidad» que nunca hemos probado. Nadie sabe a qué velocidad salta: si salta a una velocidad normal, sería un cambio automático al conducir.',
+    note: 'La segunda parte es conduciendo: hace falta un acompañante que mire las tiras y conteste. El conductor no mira el móvil ni las tiras, y nunca se pasa un límite para provocarlo.',
+    stages: [
+      {
+        id: 'modes',
+        prepare: [{ kind: 'event', key: 'speed', on: true }],
+        instruction: `${GARAGE} Arranca y, en P, cambia entre ECO PRO, COMFORT y SPORT con el botón de modos junto a la palanca.`,
+        observe: 'las tiras.',
+        question: '¿Cambiaron las tiras con el modo de conducción?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Las tiras reaccionan al modo de conducción.' },
+          { id: 'no', label: 'No', conclusion: 'El modo de conducción no cambia las tiras.' },
+        ],
+      },
+      {
+        id: 'drive',
+        instruction:
+          'Conduce con normalidad, sin pasar ningún límite. Tu acompañante (nunca el conductor) mira las tiras y la velocidad, y contesta. Si el aviso molesta al conducir, pulsad «Saltar esta prueba»: se apaga enseguida.',
+        observe: 'si las tiras cambian o parpadean, y a qué velocidad.',
+        question: '¿Cambiaron las tiras al ir más rápido?',
+        answers: [
+          { id: 'low', label: 'Sí, por debajo de 50 km/h', conclusion: 'El aviso de velocidad salta por debajo de 50 km/h.', offers: ['keepSpeedOn'] },
+          { id: 'mid', label: 'Sí, entre 50 y 100 km/h', conclusion: 'El aviso de velocidad salta entre 50 y 100 km/h.', offers: ['keepSpeedOn'] },
+          { id: 'high', label: 'Sí, por encima de 100 km/h', conclusion: 'El aviso de velocidad salta por encima de 100 km/h.', offers: ['keepSpeedOn'] },
+          { id: 'no', label: 'No cambió nada', conclusion: 'El aviso de velocidad no se vio a las velocidades a las que fuisteis.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'night',
+    title: 'De noche: que baje solo el salpicadero',
+    why: 'Al arrancar de noche baja el brillo. Con las zonas «Delante / detrás» quizá baje solo el salpicadero y las puertas sigan igual: un cambio más visible al conducir de noche. De paso se confirma que la bajada viene de la opción «consola a mitad de brillo».',
+    note: `Hazla de noche (o en un garaje oscuro) con el mando de luces en AUTO. ${GARAGE}`,
+    stages: [
+      {
+        id: 'base',
+        instruction: `${GARAGE} Si el motor está en marcha, apágalo. Pon el contacto (START sin pisar el freno), mira las tiras y arranca (freno + START).`,
+        observe: 'el salpicadero y las puertas justo al arrancar.',
+        question: '¿Qué bajó al arrancar (con tus zonas de siempre)?',
+        answers: [
+          {
+            id: 'dash',
+            label: 'Solo el salpicadero',
+            next: 'b',
+            conclusion: 'Con tus zonas de siempre ya baja solo el salpicadero: no hace falta cambiarlas.',
+          },
+          { id: 'all', label: 'Bajó todo', next: 'a' },
+          { id: 'none', label: 'No bajó nada', next: 'end', conclusion: 'No bajó nada: quizá para el coche todavía no era de noche.' },
+        ],
+      },
+      {
+        id: 'a',
+        prepare: [{ kind: 'zoning', value: 1 }],
+        instruction: 'Apaga el motor. Pon el contacto (START sin pisar el freno), espera 5 segundos y vuelve a arrancar.',
+        observe: 'el salpicadero y las puertas justo al arrancar.',
+        question: '¿Y ahora qué bajó?',
+        answers: [
+          {
+            id: 'dash',
+            label: 'Solo el salpicadero',
+            conclusion: 'Con las zonas «Delante / detrás», de noche solo baja el salpicadero.',
+            offers: ['keepFrontRearZones'],
+          },
+          { id: 'all', label: 'Bajó todo', conclusion: 'Con las zonas «Delante / detrás» baja todo igual: no aportan nada.' },
+        ],
+      },
+      {
+        id: 'b',
+        prepare: [{ kind: 'nightHalf', on: false }],
+        instruction: 'Apaga el motor. Pon el contacto (START sin pisar el freno), espera 5 segundos y vuelve a arrancar. Cuando contestes, apaga el motor.',
+        observe: 'el brillo de las tiras justo al arrancar.',
+        question: '¿Sigue bajando al arrancar?',
+        answers: [
+          {
+            id: 'no',
+            label: 'No',
+            conclusion: 'Era la opción «consola a mitad de brillo de noche». Puedes dejarla desactivada.',
+            offers: ['keepNightHalfOff'],
+          },
+          { id: 'yes', label: 'Sí', conclusion: 'Baja aunque esa opción esté apagada: lo hace el coche (brillo del iDrive o de los instrumentos).' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'doorTurnNight',
+    title: 'De noche: puerta e intermitentes, último intento',
+    why: 'El aviso de puerta y los intermitentes no se vieron con el contacto puesto. Falta probarlos de noche, con el motor en marcha y con un color base que contraste.',
+    note: 'De noche, con el motor en marcha, en P y con el freno de mano. Si estás en un garaje, abre su puerta antes de arrancar.',
+    stages: [
+      {
+        id: 'a',
+        prepare: [
+          { kind: 'color', zone: 0, hex: '#00ff00' },
+          { kind: 'event', key: 'door', on: true },
+          { kind: 'doorColor', index: 3 },
+          { kind: 'event', key: 'turn', on: true },
+          { kind: 'turnColor', index: 1 },
+        ],
+        instruction:
+          'Si estás en un garaje, abre su puerta antes de arrancar. Arranca y pon el freno de mano, en P. Abre la puerta del conductor 5 segundos y ciérrala. Luego la del acompañante.',
+        observe: 'un destello azul en cualquier tira (están en verde para que se note).',
+        question: '¿Viste azul?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Con el motor en marcha el aviso de puerta funciona.', offers: ['keepDoorWarning'] },
+          {
+            id: 'no',
+            label: 'No',
+            conclusion: 'Ni con el motor en marcha se vio el aviso de puerta (con la depuración de la app activada, que casi seguro no influye).',
+          },
+        ],
+      },
+      {
+        id: 'b',
+        // Blue: yellow shows better on blue than on green.
+        prepare: [{ kind: 'color', zone: 0, hex: '#0000ff' }],
+        instruction:
+          'Con el motor todavía en marcha, pon el intermitente izquierdo 5 segundos, luego el derecho, y luego las luces de emergencia. Cuando contestes, apaga el motor.',
+        observe: 'amarillo en alguna tira (ahora están en azul para que se note).',
+        question: '¿Viste amarillo?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Con el motor en marcha los intermitentes se ven en las tiras.', offers: ['keepTurnWarning'] },
+          {
+            id: 'no',
+            label: 'No',
+            conclusion: 'Ni con el motor en marcha se vieron los intermitentes (con la depuración de la app activada, que casi seguro no influye).',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'music',
+    title: 'Ritmo con la música (opcional)',
+    why: 'El módulo tiene modos que laten con la música. No es un aviso, pero es otra forma de que las tiras reaccionen a algo que haces.',
+    stages: [
+      {
+        id: 'a',
+        prepare: [{ kind: 'rgbMode', mode: 15 }],
+        instruction: 'Con el contacto puesto, pon música bastante alta 20 segundos y luego párala 10 segundos.',
+        observe: 'si las tiras laten al ritmo y se paran al quitar la música.',
+        question: '¿Laten con la música y se paran sin ella?',
+        answers: [
+          { id: 'yes', label: 'Sí', conclusion: 'Los modos de ritmo funcionan: los tienes en la pestaña Color, «Modos RGB».' },
+          {
+            id: 'no',
+            label: 'No',
+            conclusion:
+              'Con la fuente de sonido sin elegir, los modos de ritmo no reaccionan. Falta probar «micrófono interno» y «altavoces del coche», que la app no puede devolver luego a como estaban.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'followLights',
+    title: 'Que las tiras sigan las luces del coche (de día)',
+    why: 'El módulo puede encender el ambiente solo cuando las luces del coche están encendidas. Con el mando en AUTO cambiaría solo según la luz: apagado de día, encendido al anochecer, en túneles y en garajes.',
+    note: 'Mejor de día. Si las tiras se quedan apagadas, no pasa nada: al terminar la prueba la app las vuelve a encender, salvo que elijas dejarlo así.',
+    stages: [
+      {
+        id: 'a',
+        prepare: [{ kind: 'power', mode: 2 }],
+        instruction: 'Con el contacto puesto, pon las luces de cruce y espera 3 segundos.',
+        observe: 'si las tiras están encendidas.',
+        question: '¿Cómo están las tiras con las luces de cruce?',
+        answers: [
+          { id: 'on', label: 'Encendidas' },
+          {
+            id: 'off',
+            label: 'Apagadas',
+            next: 'end',
+            conclusion: 'Con las luces encendidas las tiras se apagan: el módulo no detecta las luces de tu coche.',
+          },
+        ],
+      },
+      {
+        id: 'b',
+        instruction: 'Ahora gira el mando de luces a 0 y espera 3 segundos (si el mando vuelve solo a AUTO, es normal: las luces se apagan igual).',
+        observe: 'si las tiras se apagan.',
+        question: '¿Y con las luces apagadas?',
+        answers: [
+          {
+            id: 'off',
+            label: 'Apagadas',
+            conclusion: 'Las tiras siguen las luces del coche: con el mando en AUTO se encenderán y apagarán solas. De día, en AUTO, se quedarán apagadas.',
+            offers: ['keepFollowLights'],
+          },
+          {
+            id: 'on',
+            label: 'Encendidas',
+            next: 'end',
+            conclusion: 'Con las luces apagadas las tiras siguen encendidas: el módulo no sigue las luces de tu coche.',
+          },
+        ],
+      },
+      {
+        id: 'c',
+        instruction: 'Deja el mando de luces en AUTO.',
+        observe: 'las tiras.',
+        question: '¿Y en AUTO, ahora?',
+        answers: [
+          { id: 'on', label: 'Encendidas', conclusion: 'En AUTO, ahora mismo el coche lleva las luces encendidas, y las tiras también.' },
+          { id: 'off', label: 'Apagadas', conclusion: 'En AUTO y con luz de día se quedan apagadas: se encenderán al anochecer.' },
+        ],
+      },
+    ],
+  },
+];
+
+const ROUND1_NOTE = 'De la primera ronda (7–9/11). Si quieres repetirla, pulsa «Hacerla ahora».';
+
+/** The session: the second round in order, then the first round on demand. */
+export const CAR_TESTS: readonly CarTest[] = [...CAR_TESTS_ROUND2, ...CAR_TESTS_ROUND1.map((t) => ({ ...t, archived: ROUND1_NOTE }))];
+
 // ---------------------------------------------------------------------------
 // Preparation (pure)
 
@@ -595,6 +1036,31 @@ export function preparePlan(actions: readonly PrepareAction[], snapshot?: Snapsh
       case 'doorColor':
         plan.commands.push(cmd.doorColor(action.index));
         plan.unreadable = union(plan.unreadable, ['doorColor']);
+        break;
+      case 'power':
+        plan.commands.push(cmd.power(action.mode));
+        plan.unreadable = union(plan.unreadable, ['power']);
+        break;
+      case 'zoning': {
+        plan.commands.push(cmd.zoning(action.value));
+        touch('zoning');
+        // The sliders change meaning with the zoning: the same values are sent again.
+        const b = snapshot?.brightness;
+        if (b?.b1 != null) plan.commands.push(cmd.brightness(1, b.b1));
+        if (b?.b2 != null) plan.commands.push(cmd.brightness(2, b.b2));
+        if (b?.b3 != null) plan.commands.push(cmd.brightness(3, b.b3));
+        touch('brightness.b1', 'brightness.b2', 'brightness.b3');
+        break;
+      }
+      case 'color':
+        plan.commands.push(cmd.color(action.zone, action.hex));
+        // A zone colour is put back by the whole-car colour.
+        touch('color');
+        break;
+      case 'rgbMode':
+        plan.commands.push(cmd.rgbMode(action.mode));
+        // The colour is sent again after the mode when restoring (a mode can replace it).
+        touch('rgbMode', 'color');
         break;
       case 'effect':
         plan.commands.push(cmd.effect(action.id));
@@ -646,6 +1112,16 @@ export function applyActions(values: SnapshotValues, actions: readonly PrepareAc
         out.effect = action.id;
         out.effectCustomEnabled = false;
         break;
+      case 'zoning':
+        out.zoning = action.value;
+        break;
+      case 'color':
+        // A single zone is not modelled: the module reports one colour.
+        if (action.zone === 0) out.color = `#${cmd.normalizeHexColor(action.hex)}`;
+        break;
+      case 'rgbMode':
+        out.rgbMode = action.mode;
+        break;
       case 'nightHalf':
         out.nightHalf = action.on;
         break;
@@ -670,15 +1146,38 @@ export function applyActions(values: SnapshotValues, actions: readonly PrepareAc
   return out;
 }
 
-/** Default of each unreadable value (the vendor app's first option). */
+/** Command of each unreadable value. */
+const UNREADABLE_ENCODERS: Readonly<Record<UnreadableField, (value: number) => string>> = {
+  turnColor: (n) => cmd.turnColor(n),
+  doorColor: (n) => cmd.doorColor(n),
+  power: (n) => cmd.power(n as cmd.PowerMode),
+};
+
+/** Default of each unreadable value (the vendor app's first option; the lights on for [07]). */
+const UNREADABLE_DEFAULT_VALUES: Readonly<Record<UnreadableField, number>> = { turnColor: 0, doorColor: 0, power: 1 };
+
 export const UNREADABLE_DEFAULTS: Readonly<Record<UnreadableField, () => string>> = {
-  turnColor: () => cmd.turnColor(0),
-  doorColor: () => cmd.doorColor(0),
+  turnColor: () => UNREADABLE_ENCODERS.turnColor(UNREADABLE_DEFAULT_VALUES.turnColor),
+  doorColor: () => UNREADABLE_ENCODERS.doorColor(UNREADABLE_DEFAULT_VALUES.doorColor),
+  power: () => UNREADABLE_ENCODERS.power(UNREADABLE_DEFAULT_VALUES.power),
 };
 
 export const UNREADABLE_NOTES: Readonly<Record<UnreadableField, string>> = {
   turnColor: 'El color del intermitente no se puede leer del módulo: se ha dejado en rojo, el valor por defecto.',
   doorColor: 'El color de puerta abierta no se puede leer del módulo: se ha dejado en rojo, el valor por defecto.',
+  power: 'El encendido de las tiras no se puede leer del módulo: se ha dejado en «Encendido».',
+};
+
+const UNREADABLE_KNOWN_NOTES: Readonly<Record<UnreadableField, string>> = {
+  turnColor: 'El color del intermitente se deja como estaba (lo elegiste en una sesión anterior).',
+  doorColor: 'El color de puerta abierta se deja como estaba (lo elegiste en una sesión anterior).',
+  power: 'Las tiras se dejan siguiendo las luces del coche, como estaban (lo elegiste en una sesión anterior).',
+};
+
+const UNREADABLE_KEPT_NOTES: Readonly<Record<UnreadableField, string>> = {
+  turnColor: 'El color del intermitente se deja como elegiste.',
+  doorColor: 'El color de puerta abierta se deja como elegiste.',
+  power: 'Las tiras se dejan siguiendo las luces del coche, como elegiste.',
 };
 
 /** What the user chose to keep instead of restoring (applied on top of the snapshot). */
@@ -688,9 +1187,82 @@ export interface KeptChanges {
   welcomeEnabled?: boolean;
   welcomeMode?: number;
   welcomeColor?: number;
+  zoning?: BinaryValue;
+  events?: Partial<Record<CarEventKey, 0 | 1>>;
+  /** Values the module never reports, restored to these instead of their default. */
+  unreadable?: Partial<Record<UnreadableField, number>>;
+}
+
+/** Offers that keep fixed values (the welcome ones depend on the stage and are handled apart). */
+const FIXED_KEEPS: Partial<Record<Offer, { changes: KeptChanges; note: string }>> = {
+  keepFollowLights: {
+    changes: { unreadable: { power: 2 } },
+    note: 'A petición tuya, las tiras siguen las luces del coche ([0702]).',
+  },
+  keepFrontRearZones: {
+    changes: { zoning: 1 },
+    note: 'A petición tuya se dejan las zonas de brillo «Delante / detrás» ([1401]).',
+  },
+  keepSpeedOn: { changes: { events: { speed: 1 } }, note: 'A petición tuya se deja activado el aviso de velocidad ([3301]).' },
+  keepRadarOn: { changes: { events: { radar: 1 } }, note: 'A petición tuya se deja activado el radar ([3201]).' },
+  keepDoorWarning: {
+    changes: { events: { door: 1 }, unreadable: { doorColor: 3 } },
+    note: 'A petición tuya se deja activado el aviso de puerta, en azul ([3101] [4603]).',
+  },
+  keepTurnWarning: {
+    changes: { events: { turn: 1 }, unreadable: { turnColor: 1 } },
+    note: 'A petición tuya se deja activado el aviso de intermitentes, en amarillo ([3401] [4501]).',
+  },
+};
+
+function mergeKept(a: KeptChanges, b: KeptChanges): KeptChanges {
+  return {
+    ...a,
+    ...b,
+    ...(a.events || b.events ? { events: { ...a.events, ...b.events } } : {}),
+    ...(a.unreadable || b.unreadable ? { unreadable: { ...a.unreadable, ...b.unreadable } } : {}),
+  };
+}
+
+/** Unreadable values the user chose to keep, over all tests (in test order). */
+export function keptUnreadable(records: Record<string, TestRecord>, tests: readonly CarTest[] = CAR_TESTS): Partial<Record<UnreadableField, number>> {
+  const out: Partial<Record<UnreadableField, number>> = {};
+  for (const test of tests) Object.assign(out, records[test.id]?.keptChanges?.unreadable);
+  return out;
+}
+
+/**
+ * The command that puts an unreadable value back: what the user kept in this
+ * session, else what an earlier session left (`known`), else its default.
+ */
+export function unreadableRestore(
+  u: UnreadableField,
+  kept: Partial<Record<UnreadableField, number>>,
+  known: Partial<Record<UnreadableField, number>> = {},
+): { command: string; note: string } {
+  if (kept[u] !== undefined) return { command: UNREADABLE_ENCODERS[u](kept[u] as number), note: UNREADABLE_KEPT_NOTES[u] };
+  if (known[u] !== undefined) return { command: UNREADABLE_ENCODERS[u](known[u] as number), note: UNREADABLE_KNOWN_NOTES[u] };
+  return { command: UNREADABLE_DEFAULTS[u](), note: UNREADABLE_NOTES[u] };
+}
+
+/** The copy's raw frames with the unreadable values the user kept, for comparing positions nobody decodes. */
+function framesWithKept(frames: Record<string, string>, kept: Partial<Record<UnreadableField, number>>): Record<string, string> {
+  const out = { ...frames };
+  const put = (code: string, at: number, value: number) => {
+    const f = out[code];
+    if (f && f.length > at + 1) out[code] = f.slice(0, at) + value.toString(16).padStart(2, '0').toUpperCase() + f.slice(at + 2);
+  };
+  // backup.ts UNKNOWN_SPANS: 4E/1F 7–8 «¿encendido?», 26 25–26 «¿color de puerta?».
+  if (kept.power !== undefined) for (const code of ['4E', '1F']) put(code, 7, kept.power);
+  if (kept.doorColor !== undefined) put('26', 25, kept.doorColor);
+  return out;
 }
 
 function applyKept(values: SnapshotValues, kept: KeptChanges): void {
+  if (kept.zoning !== undefined) values.zoning = kept.zoning;
+  for (const [key, on] of Object.entries(kept.events ?? {}) as [CarEventKey, 0 | 1][]) {
+    if (values.events[key] !== UNSUPPORTED) values.events[key] = on;
+  }
   if (kept.nightHalf !== undefined) values.nightHalf = kept.nightHalf;
   if (kept.feature8 !== undefined && values.factory.featureBits) {
     values.factory.featureBits = withFeatureSwitch(values.factory.featureBits, 8, kept.feature8);
@@ -863,6 +1435,8 @@ export interface CarTestsState {
   pendingRestore: PendingRestore | null;
   /** Unreadable values changed and not yet set back. */
   unreadableDirty: UnreadableField[];
+  /** Unreadable values the module had when this session started, as far as the app knows (kept in an earlier session). */
+  knownUnreadable?: Partial<Record<UnreadableField, number>>;
   busy: string | null;
   status: StatusLine | null;
   sound: boolean;
@@ -1016,7 +1590,10 @@ function normalizeSaved(saved: unknown, demo: boolean, tests: readonly CarTest[]
   const records: Record<string, TestRecord> = {};
   for (const test of tests) {
     const r = s.records[test.id] as TestRecord | undefined;
-    records[test.id] = r && isRecord(r) && Array.isArray(r.stages) ? { ...emptyRecord(test.id), ...r } : emptyRecord(test.id);
+    if (r && isRecord(r) && Array.isArray(r.stages)) records[test.id] = { ...emptyRecord(test.id), ...r };
+    // A test added after this session was saved was not part of it.
+    else if (s.phase !== 'idle') records[test.id] = { ...emptyRecord(test.id), status: 'notOffered', notes: ['No existía en esta sesión.'] };
+    else records[test.id] = emptyRecord(test.id);
   }
   // A reload cannot resume an operation half-way: a session being started is
   // dropped (nothing was changed yet; an owed [2100] is sent by the factory
@@ -1337,6 +1914,7 @@ export class CarTestsRunner {
         this.state.set({
           ...initialCarTestsState(this.c.demo),
           sound: s.sound,
+          knownUnreadable: this.unreadableValues(s),
           phase: 'starting',
           startedAt,
           device: { name: this.c.session.state.get().device?.name ?? null },
@@ -1400,6 +1978,11 @@ export class CarTestsRunner {
   private gotoNext(): void {
     const records = { ...this.state.get().records };
     let next: string | null = null;
+    // Tests of an earlier round are never offered in order: shown as such from the start.
+    for (const test of this.tests) {
+      const r = records[test.id] ?? emptyRecord(test.id);
+      if (test.archived && r.status === 'pending') records[test.id] = { ...r, status: 'notOffered', notes: union(r.notes, [test.archived]) };
+    }
     for (const test of this.tests) {
       const r = records[test.id] ?? emptyRecord(test.id);
       if (r.status !== 'pending') continue;
@@ -1631,6 +2214,10 @@ export class CarTestsRunner {
     if (record.keptChanges.feature8 !== undefined && record.touched.includes('factory.dial') && !offers.includes('keepFeature8')) {
       offers.unshift('keepFeature8');
     }
+    // So is anything else an earlier run kept: never kept silently.
+    for (const o of record.kept) {
+      if (!offers.includes(o) && (FIXED_KEEPS[o] || o === 'keepNightHalfOff')) offers.push(o);
+    }
     this.updateRecord(test.id, (r) => ({ ...r, conclusions: union(r.conclusions, conclusions), offers }));
     const s = this.state.get();
     const waiting = s.phase === 'finished' && s.waiting?.testId === test.id;
@@ -1713,9 +2300,15 @@ export class CarTestsRunner {
 
   /** The changes behind the offers the user ticked, with a note for each. */
   private keptChangesFor(test: CarTest, record: TestRecord, kept: readonly Offer[]): { changes: KeptChanges; notes: string[] } {
-    const changes: KeptChanges = {};
+    let changes: KeptChanges = {};
     const notes: string[] = [];
     const s = this.state.get();
+    for (const offer of kept) {
+      const fixed = FIXED_KEEPS[offer];
+      if (!fixed) continue;
+      changes = mergeKept(changes, fixed.changes);
+      notes.push(fixed.note);
+    }
     if (kept.includes('keepNightHalfOff')) {
       changes.nightHalf = false;
       notes.push('A petición tuya se deja desactivada la «consola a mitad de brillo de noche» ([1A00]).');
@@ -1816,7 +2409,9 @@ export class CarTestsRunner {
         );
         const commands = [
           ...restoreCommands(s.target, { only: own.touched }).settings,
-          ...own.unreadable.filter((u) => !reapply.unreadable.includes(u)).map((u) => UNREADABLE_DEFAULTS[u]()),
+          ...own.unreadable
+            .filter((u) => !reapply.unreadable.includes(u))
+            .map((u) => unreadableRestore(u, keptUnreadable(s.records, this.tests), s.knownUnreadable).command),
           ...reapply.commands,
         ];
         await sendPaced(this.c, commands, { pacingMs: this.pacing() });
@@ -1852,8 +2447,10 @@ export class CarTestsRunner {
       const s = this.state.get();
       if ((s.phase !== 'active' && s.phase !== 'finished') || !s.snapshot) return;
       const interrupted: string[] = [];
-      // Before the kept changes are cleared: a kept switch 8 has to go back too.
+      // Before the kept changes are cleared: a kept switch 8 has to go back too,
+      // and so do kept values the module never reports (e.g. «seguir las luces»).
       const dial = Object.values(s.records).some((r) => r.dialChanged || r.keptChanges.feature8 !== undefined);
+      const keptUnread = Object.keys(keptUnreadable(s.records, this.tests)) as UnreadableField[];
       for (const r of Object.values(s.records)) {
         if (r.status === 'running' || r.status === 'deciding' || r.status === 'waiting') {
           interrupted.push(r.testId);
@@ -1873,7 +2470,7 @@ export class CarTestsRunner {
         ...EMPTY_REQUEST,
         reasons: union(['manual'], interrupted),
         fields: [...SETTINGS_FIELDS],
-        unreadable: this.state.get().unreadableDirty,
+        unreadable: union(this.state.get().unreadableDirty, keptUnread),
         dial,
         full: true,
         sweep: true,
@@ -1900,9 +2497,12 @@ export class CarTestsRunner {
         }
       }
       const interrupted: string[] = [];
+      // What an interrupted test changed goes back like at the end of a test (not only by the sweep).
+      let interruptedFields: SnapshotField[] = [];
       for (const r of Object.values(this.state.get().records)) {
         if (r.status === 'running' || r.status === 'deciding') {
           interrupted.push(r.testId);
+          interruptedFields = union(interruptedFields, r.touched.filter((f) => !isFactoryField(f)));
           this.updateRecord(r.testId, (x) => ({ ...x, status: 'interrupted', notes: [...x.notes, 'Sin terminar al pulsar «Terminar».'] }));
         }
       }
@@ -1913,6 +2513,7 @@ export class CarTestsRunner {
         ...EMPTY_REQUEST,
         // The interrupted tests get the outcome (and its notes) on their result row.
         reasons: union(['finish'], union(interrupted, dialOpen.map((r) => r.testId))),
+        fields: interruptedFields,
         unreadable: this.state.get().unreadableDirty,
         dial: dialOpen.length > 0,
         debugOff: true,
@@ -1981,7 +2582,12 @@ export class CarTestsRunner {
     this.run++;
     this.resumed = true;
     this.stopWatching();
-    this.state.set({ ...initialCarTestsState(this.c.demo), sound: s.sound });
+    this.state.set({ ...initialCarTestsState(this.c.demo), sound: s.sound, knownUnreadable: this.unreadableValues(s) });
+  }
+
+  /** What the module has for each unreadable value, as far as the app knows: earlier sessions, then this one's keeps. */
+  private unreadableValues(s: CarTestsState = this.state.get()): Partial<Record<UnreadableField, number>> {
+    return { ...s.knownUnreadable, ...keptUnreadable(s.records, this.tests) };
   }
 
   // -------------------------------------------------------------------------
@@ -2038,15 +2644,19 @@ export class CarTestsRunner {
         if (now === x.value) still.push(x.field);
         else notes.push(`${fieldLabel(x.field)}: se cambió después de la prueba (ahora ${formatField(x.field, before.values)}); no se toca.`);
       }
-      const fields = union(merged.full ? SETTINGS_FIELDS : [], union(union(merged.fields, differing), still)).filter(
+      let fields = union(merged.full ? SETTINGS_FIELDS : [], union(union(merged.fields, differing), still)).filter(
         (f) => !isFactoryField(f) && !held.fields.has(f),
       );
+      // The sliders change meaning with the zoning: the brightness goes again after it.
+      if (fields.includes('zoning')) fields = union(fields, ['brightness.b1', 'brightness.b2', 'brightness.b3'] as SnapshotField[]).filter((f) => !held.fields.has(f));
       const commands = fields.length ? restoreCommands(target, { only: fields }).settings : [];
       const unreadable = merged.unreadable.filter((u) => !held.unreadable.has(u));
-      const extra = unreadable.map((u) => UNREADABLE_DEFAULTS[u]());
+      const keptValues = keptUnreadable(this.state.get().records, this.tests);
+      const known = this.state.get().knownUnreadable;
+      const extra = unreadable.map((u) => unreadableRestore(u, keptValues, known).command);
       await sendPaced(this.c, [...commands, ...extra], { pacingMs: this.pacing() });
       sent.push(...commands, ...extra);
-      for (const u of unreadable) notes.push(UNREADABLE_NOTES[u]);
+      for (const u of unreadable) notes.push(unreadableRestore(u, keptValues, known).note);
       // The usage part is done: a later failure (the dial) does not send it again.
       const remaining = this.state.get().pendingRestore;
       if (remaining) {
@@ -2085,7 +2695,9 @@ export class CarTestsRunner {
         : [];
       if (fields.length && !after) notes.push('No se pudo leer el estado después de restaurar.');
       // Positions nobody decodes cannot be restored: they must at least be as in the copy.
-      const raw = merged.sweep && snapshot ? unknownPositionChanges(snapshot.frames, (after ?? before).collected.frames) : [];
+      // What the user kept on purpose is not a difference.
+      const raw =
+        merged.sweep && snapshot ? unknownPositionChanges(framesWithKept(snapshot.frames, keptValues), (after ?? before).collected.frames) : [];
       if (raw.length) {
         notes.push(`Posiciones desconocidas distintas de la copia (no se pueden restaurar): ${raw.map((r) => `${r.label} ${r.before} → ${r.after}`).join('; ')}.`);
       }
@@ -2179,10 +2791,12 @@ export function carTestsReport(state: CarTestsState, tests: readonly CarTest[] =
     if (frames.length) lines.push(`Tramas de la copia: ${frames.join(' ')}`);
   }
   lines.push('');
-  tests.forEach((test, i) => {
+  let n = 0;
+  tests.forEach((test) => {
     const r = state.records[test.id];
-    if (!r) return;
-    lines.push(`${i + 1}. ${test.title}: ${STATUS_TEXT[r.status]}`);
+    // A test not offered and never run (an earlier round, or one that did not exist then) says nothing.
+    if (!r || (r.status === 'notOffered' && r.stages.length === 0)) return;
+    lines.push(`${++n}. ${test.title}: ${STATUS_TEXT[r.status]}`);
     for (const st of r.stages) {
       lines.push(`   ${st.question} → ${st.answer}  (${clock(st.answeredAt)})`);
       if (st.prepared.length) lines.push(`     Preparado: ${st.prepared.join(' ')}`);

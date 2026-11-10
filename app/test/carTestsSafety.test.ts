@@ -4,7 +4,7 @@ import { ZYCELA_WRITE_CHAR } from '../src/ble/adapter';
 import { MockAdapter } from '../src/ble/mockAdapter';
 import { acquireLock } from '../src/state/backup';
 import { BackupStore } from '../src/state/backup';
-import { CAR_TESTS, CarTestsRunner, carTestsReport, minimalCarTests } from '../src/state/carTests';
+import { CAR_TESTS, CAR_TESTS_ROUND1, CarTestsRunner, carTestsReport, minimalCarTests } from '../src/state/carTests';
 import type { CarTestsDeps, CarTestsState } from '../src/state/carTests';
 import { AppController } from '../src/state/controller';
 import type { KeyValueStorage } from '../src/state/storage';
@@ -61,6 +61,8 @@ function newRunner(controller: AppController, extra: Partial<CarTestsDeps> = {})
     timeoutMs: 400,
     quietMs: 15,
     minTapMs: 0,
+    // These tests cover the first round; the second has its own file.
+    tests: CAR_TESTS_ROUND1,
     ...extra,
   });
   runners.push(runner);
@@ -195,7 +197,7 @@ describe('a deferred test answered days later', () => {
     expect(sent.sort()).toEqual(['[3101]', '[3905]']);
     expect(adapter.device.state).toMatchObject({ color: '00ff00', b1: 5, welcomeColor: 2, welcomeMode: 5 });
     expect(record(runner, 'sleep').restore?.notes.join(' ')).toMatch(/Color de bienvenida: se cambió después de la prueba/);
-    const report = carTestsReport(runner.state.get());
+    const report = carTestsReport(runner.state.get(), CAR_TESTS_ROUND1);
     expect(report).toContain('Contestada después de «Terminar»: no se escucharon notificaciones');
   });
 });
@@ -297,7 +299,7 @@ describe('evidence', () => {
     expect(r.stages[0].unknownChanges).toEqual([{ label: '4E 15–20 (¿color de la zona 2?)', before: '000000', after: 'FF2202' }]);
     expect(r.restore).toMatchObject({ pending: false, ok: false });
     expect(r.restore?.notes.join(' ')).toMatch(/Posiciones desconocidas distintas de la copia/);
-    expect(carTestsReport(runner.state.get())).toContain('Posiciones desconocidas cambiadas: 4E 15–20 (¿color de la zona 2?) 000000 → FF2202');
+    expect(carTestsReport(runner.state.get(), CAR_TESTS_ROUND1)).toContain('Posiciones desconocidas cambiadas: 4E 15–20 (¿color de la zona 2?) 000000 → FF2202');
   });
 
   it('says which frames did not arrive instead of «ninguno»', async () => {
@@ -310,7 +312,7 @@ describe('evidence', () => {
     await runner.answer('no');
     const st = record(runner, 'radio').stages[0];
     expect(st).toMatchObject({ stateUnknown: false, stateMissing: ['26'] });
-    expect(carTestsReport(runner.state.get())).toContain('No llegaron las tramas 26: sus ajustes no se compararon');
+    expect(carTestsReport(runner.state.get(), CAR_TESTS_ROUND1)).toContain('No llegaron las tramas 26: sus ajustes no se compararon');
   });
 
   it('counts link drops during the stage and does not claim «ninguna» for FFE2 when it was refused', async () => {
@@ -331,7 +333,7 @@ describe('evidence', () => {
     await runner.answer('yes');
     const st = record(runner, 'turn').stages[0];
     expect(st).toMatchObject({ linkDrops: 1, linkDown: false, ffe2: 'failed', evidence: 'live' });
-    const report = carTestsReport(runner.state.get());
+    const report = carTestsReport(runner.state.get(), CAR_TESTS_ROUND1);
     expect(report).toContain('La conexión se cortó 1 vez durante la prueba');
     expect(report).toContain('FFE2 no se estaba escuchando (failed): solo se escuchó FFE1.');
     expect(report).not.toContain('ninguna (FFE1 ni FFE2)');

@@ -136,6 +136,7 @@ function changedByTests(state: CarTestsState, runner: CarTestsRunner): { titles:
     r.touched.forEach((f) => labels.add(f === 'factory.dial' ? 'interruptor 8 (instalación)' : fieldLabel(f).toLowerCase()));
     if (r.unreadable.includes('turnColor')) labels.add('color del intermitente');
     if (r.unreadable.includes('doorColor')) labels.add('color de puerta abierta');
+    if (r.unreadable.includes('power')) labels.add('encendido de las tiras');
   }
   return { titles: open.map((r) => runner.test(r.testId)?.title ?? r.testId), labels: [...labels] };
 }
@@ -259,6 +260,7 @@ function PendingCard({ state, runner, ready }: { state: CarTestsState; runner: C
     ...pending.ifStill.map((x) => fieldLabel(x.field)),
     ...(pending.unreadable.includes('turnColor') ? ['Color del intermitente'] : []),
     ...(pending.unreadable.includes('doorColor') ? ['Color de puerta abierta'] : []),
+    ...(pending.unreadable.includes('power') ? ['Encendido de las tiras'] : []),
     ...(pending.dial ? ['Códigos de modelo (interruptor 8)'] : []),
     ...(pending.full ? ['Todos los ajustes'] : []),
   ];
@@ -370,7 +372,10 @@ function SnapshotCard({ state }: { state: CarTestsState }) {
 function TestDots({ state, tests }: { state: CarTestsState; tests: readonly CarTest[] }) {
   return (
     <ol className="exp-dots">
-      {tests.map((t) => {
+      {tests
+        // An earlier round's test shows only while it is run again (or once done).
+        .filter((t) => !t.archived || state.cursor?.testId === t.id || !['pending', 'notOffered'].includes(state.records[t.id]?.status ?? 'pending'))
+        .map((t) => {
         const r = state.records[t.id];
         const current = state.cursor?.testId === t.id;
         const status = current
@@ -630,6 +635,13 @@ const OFFER_LABELS: Record<Offer, string> = {
   keepFeature8: 'Dejar el interruptor 8 encendido (los avisos vuelven a como estaban: actívalos luego en la pestaña Coche)',
   keepWelcome: 'Dejar la bienvenida en este modo, con tu color de siempre',
   keepWelcomeWhite: 'Dejar la bienvenida en este modo y en blanco',
+  keepFollowLights: 'Dejar las tiras siguiendo las luces del coche (de día, con el mando en AUTO, se quedan apagadas)',
+  keepFrontRearZones:
+    'Dejar las zonas de brillo «Delante / detrás» (de noche baja solo el salpicadero; en la pestaña Brillo los deslizadores pasan a ser «Consola central» y «Puertas»)',
+  keepSpeedOn: 'Dejar activado el aviso de velocidad',
+  keepRadarOn: 'Dejar activado el radar (marcha atrás)',
+  keepDoorWarning: 'Dejar activado el aviso de puerta, en azul',
+  keepTurnWarning: 'Dejar activado el aviso de intermitentes, en amarillo',
 };
 
 function DecideCard({ runner, test, record, busy }: { runner: CarTestsRunner; test: CarTest; record: TestRecord; busy: boolean }) {
@@ -740,7 +752,7 @@ function ResultRow({ index, test, record, canRedo, onRedo }: { index: number; te
       )}
       {canRedo && (
         <button type="button" className="btn btn-ghost" onClick={onRedo}>
-          {record.status === 'notOffered' ? 'Hacerla ahora' : 'Repetir'}
+          {record.status === 'notOffered' || record.status === 'skipped' ? 'Hacerla ahora' : 'Repetir'}
         </button>
       )}
     </li>
@@ -804,9 +816,12 @@ export function CarTests() {
   const report = () => carTestsReport(state, tests);
   const json = () => JSON.stringify({ carTests: compactCarTests(state), report: report() }, null, 2);
 
-  const results = tests
+  const listed = tests
     .map((t, i) => ({ t, i, r: state.records[t.id] }))
     .filter(({ r }) => r && r.status !== 'pending' && r.status !== 'running' && r.status !== 'deciding');
+  // Earlier-round tests not run again go in their own folded list.
+  const results = listed.filter(({ t, r }) => !(t.archived && r.status === 'notOffered'));
+  const earlier = listed.filter(({ t, r }) => t.archived && r.status === 'notOffered');
 
   const onFinish = () => {
     const now = Date.now();
@@ -830,7 +845,7 @@ export function CarTests() {
       <PendingCard state={state} runner={runner} ready={ready} />
 
       {state.phase === 'idle' && (
-        <Card title="Pruebas del coche" icon="car" subtitle="Unos 25 minutos para averiguar qué lee el módulo del coche y por qué no sale la bienvenida. Puedes saltarte cualquier prueba.">
+        <Card title="Pruebas del coche" icon="car" subtitle="Segunda ronda: lo que el módulo puede hacer solo, sin el móvil. Unas pruebas son de día, otras de noche o conduciendo: sáltate las que no toquen y hazlas otro día.">
           <p className="exp-before">
             <strong>Antes de empezar:</strong> en el coche (mejor en un garaje o al atardecer; si es un garaje, con la puerta abierta
             cuando arranques), conectado al módulo, con <strong>Ajustes › Pantalla y brillo › Bloqueo automático</strong> en «Nunca» y el
@@ -841,13 +856,16 @@ export function CarTests() {
             la app lo deja como estaba y lo comprueba. Si se corta la conexión, lo restaura al volver a conectar.
           </p>
           <ol className="exp-steps">
-            {tests.map((t) => (
+            {tests.filter((t) => !t.archived).map((t) => (
               <li key={t.id}>
                 {t.title}
                 {t.advanced ? ' (avanzada)' : ''}
               </li>
             ))}
           </ol>
+          {tests.some((t) => t.archived) && (
+            <p className="hint">Las pruebas de la primera ronda siguen en los resultados («Hacerla ahora»), por si quieres repetir alguna.</p>
+          )}
           <Toggle
             label="Pitido en cada paso y al acabar la cuenta atrás"
             description="No suena con el iPhone en silencio."
@@ -965,6 +983,24 @@ export function CarTests() {
             ))}
           </ol>
         </Card>
+      )}
+
+      {earlier.length > 0 && state.phase === 'active' && (
+        <details className="card ct-earlier">
+          <summary>Pruebas de la primera ronda ({earlier.length})</summary>
+          <ol className="exp-results">
+            {earlier.map(({ t, i, r }) => (
+              <ResultRow
+                key={t.id}
+                index={i}
+                test={t}
+                record={r}
+                canRedo={!somethingOpen && !busy}
+                onRedo={() => void runner.redoTest(t.id)}
+              />
+            ))}
+          </ol>
+        </details>
       )}
 
       {inSession && state.phase !== 'starting' && (
